@@ -1,0 +1,63 @@
+{
+  "name": "dsh-threadlight",
+  "version": "0.1.0-dev.3",
+  "description": "A DSH plugin for documenting Git projects and exploring source-linked workflows.",
+  "type": "module",
+  "exports": {
+    ".": "./index.mjs",
+    "./client": "./lib/dsh-client.js",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "dsh-threadlight": "./bin/dsh-threadlight.mjs"
+  },
+  "files": [
+    "index.mjs",
+    "bin",
+    "lib",
+    "analyzer/Cargo.toml",
+    "analyzer/Cargo.lock",
+    "analyzer/src",
+    "dist/draft-diagram.js",
+    "dist/maxgraph-LICENSE.txt",
+    "skills",
+    "examples",
+    "cordis.patch.yml",
+    "README.md",
+    "AGENTS.md",
+    "docs/graph-format.md",
+    "docs/roadmap.md"
+  ],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "documentation",
+    "visualization",
+    "obsidian"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node scripts/build-draft-diagram.mjs",
+    "precheck": "npm run build",
+    "prepack": "npm run build",
+    "check": "node --test tests/*.test.mjs"
+  },
+  "dsh": {
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ],
+      "platform": "web"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "devDependencies": {
+    "@maxgraph/core": "0.25.2",
+    "esbuild": "0.28.1"
+  }
+}

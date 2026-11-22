@@ -1,0 +1,853 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Threadlight</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --paper: light-dark(#f7f6f1,#151719);
+      --panel: light-dark(#fffefb,#1d2022);
+      --ink: light-dark(#202a26,#e9eeea);
+      --quiet: light-dark(#53605a,#aab8b0);
+      --line: light-dark(#d8ded7,#353e39);
+      --accent: light-dark(#176047,#8dd1ad);
+      --highlight: light-dark(#e4efe7,#283b33);
+      --wire: light-dark(#88988e,#82978a);
+      --dependency: light-dark(#5c4c84,#c5b2f0);
+      --map-dot: light-dark(#cfdbd1,#37463d);
+      --root-fill: light-dark(#193e32,#b0dfc3);
+      --root-ink: light-dark(#f8fff9,#173527);
+      background: var(--paper);
+      color: var(--ink);
+      font: 15px/1.58 Inter, "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    h1,h2,h3,p { margin: 0; }
+    button, input { font: inherit; color: inherit; }
+    button { cursor: pointer; }
+    a { color: var(--accent); }
+    [hidden] { display: none !important; }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    header { border-bottom: 1px solid var(--line); padding: 20px clamp(14px,3.3vw,52px); display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+    .brand { font-size: .8rem; font-weight: 640; color: var(--accent); }
+    h1 { font-size: clamp(1.55rem,4vw,2rem); line-height: 1.2; letter-spacing: -.035em; }
+    .header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; font-size: .88rem; }
+    .muted { color: var(--quiet); }
+    .views { display: flex; gap: 18px; padding: 0 clamp(14px,3.3vw,52px); border-bottom: 1px solid var(--line); }
+    .view-button { border: 0; border-bottom: 3px solid transparent; padding: 10px 2px 9px; background: none; color: var(--quiet); font-weight: 630; }
+    .view-button:hover, .view-button[aria-current] { color: var(--accent); }
+    .view-button[aria-current] { border-bottom-color: var(--accent); }
+    .workspace { max-width: 1700px; margin: auto; display: grid; grid-template-columns: minmax(180px,230px) minmax(0,1fr) minmax(230px,295px); gap: 22px; padding: 24px clamp(14px,3.3vw,52px) 38px; align-items: start; }
+    .workspace > * { min-width: 0; }
+    .workspace[data-view="overview"] { display: block; }
+    body[data-view="overview"] .header-actions .review-button { display: none; }
+    body:not([data-view="process"]) .beginner { display: none; }
+    .overview-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 14px; margin-bottom: 16px; }
+    .overview-heading h2, .diagram h2, .relations h2 { font-size: clamp(1.35rem,3vw,1.8rem); line-height: 1.28; overflow-wrap: anywhere; }
+    .overview-heading p { font-size: .9rem; }
+    .overview-layout { display: grid; grid-template-columns: minmax(0,1fr) minmax(265px,340px); align-items: start; gap: 18px; }
+    .map-board { position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0,1fr) minmax(110px,.8fr) minmax(0,1fr); align-items: center; gap: clamp(20px,3vw,46px); padding: clamp(18px,3vw,38px); min-height: 380px; border: 1px solid var(--line); border-radius: 13px; background: radial-gradient(var(--map-dot) 1px, transparent 1px) 0 0 / 17px 17px, var(--panel); }
+    .map-board.single { grid-template-columns: minmax(0,.8fr) minmax(0,1fr); }
+    .map-column { position: relative; display: grid; gap: 14px; min-width: 0; }
+    .map-column:empty { display: none; }
+    .map-wires { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; color: var(--wire); }
+    .map-project, .map-area { position: relative; border-radius: 9px; text-align: left; overflow-wrap: anywhere; }
+    .map-project { color: var(--root-ink); background: var(--root-fill); padding: 16px 13px; line-height: 1.35; }
+    .map-project span { display: block; opacity: .85; font-size: .78rem; margin-bottom: 4px; }
+    .map-project strong { font-size: clamp(.97rem,1.45vw,1.3rem); }
+    .map-area { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; min-height: 65px; padding: 9px 11px; background: var(--panel); border: 1px solid var(--line); transition: border-color .12s, background-color .12s; }
+    .map-area strong, .map-area small, .group-flow small { display: block; }
+    .map-area small, .group-flow small { color: var(--quiet); margin-top: 2px; font-size: .78rem; }
+    .map-area:hover, .map-area[aria-pressed="true"] { border-color: var(--accent); background: var(--highlight); }
+    .map-area[aria-pressed="true"] { box-shadow: inset 3px 0 var(--accent); }
+    .map-area .group-arrow { flex-shrink: 0; }
+    .group-panel { min-width: 0; padding: 15px 16px; border: 1px solid var(--line); background: var(--panel); border-radius: 13px; overflow-wrap: anywhere; }
+    .group-panel h3 { font-size: 1.18rem; }
+    .group-panel p { margin: 4px 0 8px; font-size: .88rem; }
+    .group-flows { list-style: none; margin: 12px 0 0; padding: 0; border-top: 1px solid var(--line); }
+    .group-flows li + li { border-top: 1px solid var(--line); }
+    .group-flow, .relation-entry { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; width: 100%; border: 0; border-radius: 6px; background: transparent; }
+    .group-flow { padding: 9px 7px; min-height: 49px; overflow-wrap: anywhere; }
+    .group-flow:hover, .relation-entry:hover { color: var(--accent); background: var(--highlight); }
+    .group-arrow { color: var(--accent); }
+    .scope { display: block; margin-bottom: 5px; color: var(--accent); font-size: .84rem; overflow-wrap: anywhere; }
+    .nav > details > summary { display: none; cursor: pointer; font-weight: 630; }
+    .nav label { display: block; font-size: .82rem; font-weight: 620; margin-bottom: 5px; }
+    .nav input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--panel); }
+    #flows { margin-top: 13px; }
+    #flows details { margin-bottom: 5px; }
+    #flows summary { cursor: pointer; padding: 5px 2px; font-weight: 610; }
+    .nav-button, .relation { display: block; width: 100%; border: 0; background: transparent; padding: 6px 9px; border-radius: 6px; text-align: left; overflow-wrap: anywhere; }
+    .nav-button { font-size: .86rem; }
+    .nav-button:hover, .nav-button[aria-current], .relation:hover { background: var(--highlight); color: var(--accent); }
+    #summary { margin: 7px 0 16px; }
+    .guide-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+    .guide-control { border: 1px solid var(--line); border-radius: 7px; background: var(--panel); padding: 6px 10px; font-size: .86rem; }
+    .guide-control:hover:not(:disabled), .guide-control[aria-pressed="true"] { border-color: var(--accent); background: var(--highlight); color: var(--accent); }
+    .guide-control:disabled { cursor: default; opacity: .6; }
+    .guide-status { margin-left: auto; font-size: .84rem; }
+    .guide-choices { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .guide-choices .guide-control { color: var(--accent); text-align: left; overflow-wrap: anywhere; }
+    .graph { position: relative; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; padding: 16px 24px; }
+    .graph svg { position: absolute; inset: 0; height: 100%; width: 100%; pointer-events: none; color: var(--wire); }
+    .graph path.wire { stroke: currentColor; fill: none; stroke-width: 1.35px; }
+    .graph path.return-edge { stroke-dasharray: 5 4; }
+    .graph path.selected { color: var(--accent); stroke-width: 2px; }
+    .graph path.walked { color: var(--accent); stroke-width: 2.5px; }
+    .graph path.outside { opacity: .28; }
+    #lanes { position: relative; display: grid; gap: 28px; }
+    .lane { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+    .step { flex: 1 1 125px; max-width: 430px; min-width: 0; border: 1px solid var(--line); background: var(--panel); border-radius: 9px; text-align: left; padding: 8px 11px; overflow-wrap: anywhere; }
+    .step:hover, .step[aria-pressed="true"] { border-color: var(--accent); background: var(--highlight); }
+    .step.on-route { border-color: var(--accent); }
+    .step.next-step { border: 1px dashed var(--accent); }
+    .step:disabled { opacity: .56; cursor: default; }
+    .step:disabled:hover { background: var(--panel); border-color: var(--line); }
+    .step.on-route:disabled { opacity: .88; border-color: var(--accent); }
+    .step strong { font-weight: 640; }
+    .step span { display: block; font-size: .84rem; margin-top: 3px; color: var(--quiet); }
+    .step .condition { margin: 0 0 3px; color: var(--accent); font-size: .76rem; }
+    .step .step-role { display: flex; align-items: center; gap: 7px; margin: 0 0 4px; font-size: .75rem; font-weight: 630; color: var(--accent); }
+    .step-role::before { content: ""; width: 8px; height: 8px; border: 1px solid currentColor; border-radius: 50%; }
+    .step-role.entry::before { background: currentColor; }
+    .step-role.branch::before { border-radius: 1px; rotate: 45deg; }
+    .detail { border-top: 2px solid var(--accent); padding-top: 10px; overflow-wrap: anywhere; }
+    .detail h2 { font-size: 1.12rem; margin-bottom: 5px; }
+    .detail h3 { font-size: .88rem; margin: 13px 0 3px; }
+    .detail ul { padding-left: 19px; margin: 5px 0 0; font-size: .88rem; }
+    .detail li + li { margin-top: 5px; }
+    .detail code { font-size: .79rem; color: var(--quiet); user-select: all; }
+    .refs summary { cursor: pointer; }
+    .evidence-preview { max-height: 13rem; overflow: auto; padding: 8px; margin: 5px 0; border: 1px solid var(--line); white-space: pre-wrap; font-size: .76rem; }
+    .relation { padding: 4px 0; color: var(--accent); font-size: .89rem; }
+    .relations { grid-column: 2 / -1; }
+    .relations-heading { margin-bottom: 15px; }
+    .relations-map { position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0,1fr) minmax(140px,.75fr) minmax(0,1fr); gap: clamp(22px,3.3vw,48px); align-items: center; }
+    .relations-map h3 { font-size: .86rem; margin-bottom: 6px; }
+    .relations-side, .relations-current { min-width: 0; overflow-wrap: anywhere; }
+    .relations-current { position: relative; padding: 15px; border: 1px solid var(--accent); border-radius: 10px; background: var(--highlight); }
+    .relations-current .relation { width: auto; }
+    .relations-current strong { display: block; line-height: 1.4; margin-bottom: 5px; }
+    .relations-list { margin: 0; padding: 0; list-style: none; }
+    .relations-list li + li { margin-top: 6px; }
+    .relation-entry { align-items: flex-start; flex-direction: column; gap: 2px; padding: 9px 11px; border: 1px solid var(--line); background: var(--panel); }
+    .relation-entry small { color: var(--quiet); font-size: .78rem; }
+    .relation-entry .relation-type { font-weight: 640; color: var(--accent); }
+    .relation-entry .relation-type.uses { color: var(--dependency); }
+    .relations-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 16px; margin-top: 12px; font-size: .82rem; color: var(--quiet); }
+    .relations-legend span::before { content: ""; display: inline-block; border-top: 2px solid var(--accent); width: 19px; margin-right: 6px; vertical-align: middle; }
+    .relations-legend .uses::before { border-top-style: dashed; border-color: var(--dependency); }
+    .empty-relations { border: 1px solid var(--line); background: var(--panel); padding: 16px; border-radius: 10px; }
+    .empty-relations .relation { width: auto; margin-top: 3px; }
+    .refs { list-style: none; padding-left: 0 !important; }
+    .beginner { display: flex; align-items: center; gap: 7px; cursor: pointer; }
+    .beginner input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+    .term { display: inline; border: 0; padding: 0; color: var(--accent); background: transparent; text-decoration: underline dotted; text-underline-offset: .2em; text-align: left; }
+    .term:hover, .term[aria-describedby] { background: var(--highlight); }
+    .term-tooltip { position: fixed; z-index: 2; width: min(310px, calc(100vw - 24px)); border: 1px solid var(--line); padding: 11px 13px; border-radius: 9px; background: var(--panel); color: var(--ink); box-shadow: 0 5px 22px #0002; font-size: .9rem; overflow-wrap: anywhere; }
+    .term-tooltip strong { display: block; color: var(--accent); margin-bottom: 3px; }
+    @media(max-width: 1020px) { .workspace { grid-template-columns: minmax(160px,205px) minmax(0,1fr); } .detail { grid-column: 2; } }
+    @media(max-width: 940px) { .overview-layout { grid-template-columns: minmax(0,1fr); } }
+    @media(max-width: 800px) {
+      .relations-map { grid-template-columns: 1fr; gap: 14px; }
+      .relations-current { grid-row: 1; }
+      .relations-map canvas, .relations-legend { display: none; }
+      .relation-entry[data-direction="in"] .relation-type::before { content: "↑ "; }
+      .relation-entry[data-direction="out"] .relation-type::before { content: "↓ "; }
+    }
+    @media(max-width: 650px) {
+      .workspace { grid-template-columns: 1fr; gap: 19px; padding-top: 16px; }
+      .detail, .relations { grid-column: 1; }
+      .nav > details > summary { display: list-item; }
+      .nav label { margin-top: 8px; }
+      .graph { padding-inline: 18px; }
+      .map-board, .map-board.single { grid-template-columns: 1fr; min-height: 0; gap: 10px; padding: 12px 13px 12px 29px; }
+      .map-project { grid-row: 1; padding: 10px 12px; }
+      .map-project span { display: inline; margin-right: 7px; }
+      .map-column { gap: 10px; }
+      .map-area { min-height: 50px; padding: 6px 10px; }
+      .map-area small { margin-top: 0; }
+      .guide-status { width: 100%; margin-left: 0; }
+    }
+    @media(prefers-reduced-motion: reduce) { .map-area { transition: none; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div><p class="brand">Threadlight</p><h1 id="project"></h1></div>
+    <div class="header-actions">
+      <label class="beginner"><input type="checkbox" id="beginner">新手模式</label>
+      <span id="revision" class="muted"></span><!-- threadlight-heading -->
+    </div>
+  </header>
+  <nav class="views" aria-label="架构视角">
+    <button class="view-button" type="button" data-view="overview">功能总览</button>
+    <button class="view-button" type="button" data-view="process">操作流程</button>
+    <button class="view-button" type="button" data-view="relations">功能关系</button>
+  </nav>
+  <main class="workspace" id="workspace">
+    <section id="overview-panel" aria-labelledby="overview-title" hidden>
+      <div class="overview-heading"><h2 id="overview-title">功能地图</h2><p id="overview-count" class="muted"></p></div>
+      <div class="overview-layout">
+        <div class="map-board" id="map-board" role="group" aria-label="项目与功能区">
+          <canvas class="map-wires" id="map-wires" aria-hidden="true"></canvas>
+          <div class="map-column" id="map-left"></div>
+          <div class="map-project" id="map-project"><span>项目</span><strong></strong></div>
+          <div class="map-column" id="map-right"></div>
+        </div>
+        <section class="group-panel" id="group-panel" aria-labelledby="group-title">
+          <h3 id="group-title" tabindex="-1"></h3><p class="muted" id="group-summary"></p>
+          <ul class="group-flows" id="group-flows"></ul>
+        </section>
+      </div>
+    </section>
+    <nav class="nav" id="navigation" aria-label="功能线路" hidden>
+      <details id="navigator" open><summary>切换线路</summary><label for="search">查找功能线路</label><input type="search" id="search"><div id="flows"></div></details>
+    </nav>
+    <section class="diagram" id="process-panel" aria-labelledby="title" hidden>
+      <span class="scope" id="process-group"></span><h2 id="title" data-review-text=""></h2><p id="summary" class="muted" data-review-text=""></p>
+      <div class="guide-bar">
+        <button class="guide-control" id="guide-toggle" type="button" aria-pressed="false">从这一步开始导览</button>
+        <button class="guide-control" id="guide-back" type="button" hidden>回到上一步</button>
+        <p class="guide-status muted" id="guide-status" aria-live="polite" tabindex="-1"></p>
+      </div>
+      <div class="guide-choices" id="guide-choices" hidden></div>
+      <div class="graph" id="graph">
+        <svg aria-hidden="true"><defs><marker id="arrow" markerWidth="7" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L7 4 L0 8z" fill="var(--wire)"/></marker></defs><g id="wires"></g></svg>
+        <div id="lanes"></div>
+      </div>
+    </section>
+    <aside class="detail" id="detail" aria-label="步骤详情" aria-live="polite" hidden></aside>
+    <section class="relations" id="relations-panel" aria-labelledby="relations-title" hidden>
+      <div class="relations-heading"><span class="scope" id="relations-group"></span><h2 id="relations-title"></h2></div>
+      <div id="relations-content"></div>
+    </section>
+  </main>
+  <div id="term-tooltip" class="term-tooltip" role="tooltip" hidden><strong></strong><p></p></div>
+  <script type="application/json" id="data">"THREADLIGHT_GRAPH_DATA"</script>
+  <!-- threadlight-review -->
+  <script>
+    const data = JSON.parse(document.getElementById('data').textContent)
+    const by = id => document.getElementById(id)
+    const graph = by('graph'), lanes = by('lanes'), wires = by('wires'), detail = by('detail')
+    const groups = data.groups.map(group => ({
+      group, items: group.flows.map(flow => ({ group, flow, key: group.id + '/' + flow.id })),
+    }))
+    const groupById = new Map(groups.map(entry => [entry.group.id, entry]))
+    const groupChoices = new Map()
+    const mapBoard = by('map-board'), mapCanvas = by('map-wires'), mapRoot = by('map-project')
+    const items = groups.flatMap(group => group.items)
+    const itemByKey = new Map(items.map(item => [item.key, item]))
+    const connections = new Map(items.map(item => [item.key, { incoming: [], outgoing: [] }]))
+    let linkCount = 0
+    for (const item of items) {
+      for (const link of item.flow.links ?? []) {
+        const target = itemByKey.get(link.group + '/' + link.flow)
+        connections.get(item.key).outgoing.push({ item: target, kind: link.kind })
+        connections.get(target.key).incoming.push({ item, kind: link.kind })
+        linkCount++
+      }
+    }
+    const kinds = { source: '实现', test: '测试', documentation: '文档', workflow: '构建' }
+    const cards = new Map()
+    const selectedByFlow = new Map()
+    const viewButtons = document.querySelectorAll('.view-button')
+    const narrow = matchMedia('(max-width: 650px)')
+    const stackedOverview = matchMedia('(max-width: 940px)')
+    const beginner = by('beginner'), tooltip = by('term-tooltip')
+    const glossary = new Map(data.glossary.map(entry => [entry.term.toLowerCase(), entry.definition]))
+    const patterns = [...glossary.keys()].sort((a, b) => b.length - a.length).map(term => {
+      const escape = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const start = /^[a-z0-9_]/.test(term) ? '(?<![a-z0-9_])' : ''
+      const end = /[a-z0-9_]$/.test(term) ? '(?![a-z0-9_])' : ''
+      return start + escape + end
+    })
+    const termPattern = new RegExp(patterns.join('|'), 'gi')
+    let current = items[0], selected, mode, guide
+    let activeTerm, pinned, closeTimer
+    by('project').textContent = data.project.name
+    document.title = data.project.name + ' · Threadlight'
+    const revision = data.snapshot?.id || data.snapshot?.baseCommit
+    if (typeof revision === 'string') by('revision').textContent = '源码快照 ' + revision.slice(0, 8)
+
+    function make(tag, text, css) {
+      const element = document.createElement(tag)
+      if (text) element.textContent = text
+      if (css) element.className = css
+      return element
+    }
+
+    function button(text, css, fn) {
+      const result = make('button', text, css)
+      result.type = 'button'
+      result.addEventListener('click', fn)
+      return result
+    }
+
+    function positionTooltip() {
+      if (!activeTerm) return
+      const anchor = activeTerm.getBoundingClientRect()
+      if (anchor.bottom < 0 || anchor.top > innerHeight) {
+        hideTooltip()
+        return
+      }
+      const { width, height } = tooltip.getBoundingClientRect()
+      const below = anchor.bottom + 6
+      const above = anchor.top - height - 6
+      tooltip.style.top = Math.max(8, below + height > innerHeight - 8 && above >= 8
+        ? above : Math.min(below, innerHeight - height - 8)) + 'px'
+      tooltip.style.left = Math.max(12, Math.min(anchor.left, innerWidth - width - 12)) + 'px'
+    }
+
+    function hideTooltip() {
+      clearTimeout(closeTimer)
+      activeTerm?.removeAttribute('aria-describedby')
+      activeTerm = null
+      pinned = false
+      tooltip.hidden = true
+    }
+
+    function showTooltip(trigger, definition) {
+      clearTimeout(closeTimer)
+      if (activeTerm !== trigger) {
+        hideTooltip()
+        activeTerm = trigger
+        tooltip.firstElementChild.textContent = trigger.textContent
+        tooltip.lastElementChild.textContent = definition
+        trigger.setAttribute('aria-describedby', tooltip.id)
+        tooltip.hidden = false
+      }
+      positionTooltip()
+    }
+
+    function scheduleTooltipClose() {
+      clearTimeout(closeTimer)
+      if (!pinned && activeTerm !== document.activeElement) closeTimer = setTimeout(hideTooltip, 160)
+    }
+
+    function withTerms(element, text) {
+      element.textContent = text
+      if (!beginner.checked) return element
+      const parts = []
+      let end = 0
+      for (const match of text.matchAll(termPattern)) {
+        const term = match[0], definition = glossary.get(term.toLowerCase())
+        if (!definition) continue
+        parts.push(text.slice(end, match.index))
+        const trigger = button(term, 'term', () => {
+          if (activeTerm === trigger && pinned) hideTooltip()
+          else {
+            showTooltip(trigger, definition)
+            pinned = true
+          }
+        })
+        trigger.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') showTooltip(trigger, definition) })
+        trigger.addEventListener('pointerleave', scheduleTooltipClose)
+        trigger.addEventListener('focus', () => showTooltip(trigger, definition))
+        trigger.addEventListener('blur', () => { if (activeTerm === trigger) hideTooltip() })
+        parts.push(trigger)
+        end = match.index + term.length
+      }
+      if (parts.length) element.replaceChildren(...parts, text.slice(end))
+      return element
+    }
+
+    function reviewText(tag, text, node) {
+      const element = make(tag)
+      if (data.review) element.dataset.reviewText = node
+      return withTerms(element, text)
+    }
+
+    function renderOverview() {
+      by('overview-count').textContent = groups.length + ' 个功能区 · ' + items.length + ' 条线路'
+      mapRoot.querySelector('strong').textContent = data.project.name
+      mapBoard.classList.toggle('single', groups.length === 1)
+      const split = groups.length === 1 ? 0 : Math.ceil(groups.length / 2)
+      groups.forEach((entry, index) => {
+        const { group, items } = entry
+        const choice = button('', 'map-area', () => {
+          if (current.group !== group) current = items[0]
+          showGroup(entry, stackedOverview.matches)
+        })
+        const label = make('span')
+        label.append(make('strong', group.title), make('small', items.length + ' 条线路'))
+        const arrow = make('span', '›', 'group-arrow')
+        arrow.setAttribute('aria-hidden', 'true')
+        choice.append(label, arrow)
+        choice.dataset.reviewGroup = group.id
+        choice.setAttribute('aria-controls', 'group-panel')
+        groupChoices.set(group.id, choice)
+        by(index < split ? 'map-left' : 'map-right').append(choice)
+      })
+    }
+
+    function showGroup({ group, items }, focus = false) {
+      const title = by('group-title')
+      title.textContent = group.title
+      title.dataset.reviewGroup = group.id
+      const summary = by('group-summary')
+      summary.textContent = group.summary ?? ''
+      summary.hidden = !group.summary
+      for (const [id, choice] of groupChoices) choice.setAttribute('aria-pressed', id === group.id)
+      by('group-flows').replaceChildren(...items.map(item => {
+        const row = make('li')
+        const link = button('', 'group-flow', () => activate('process', item, true))
+        const label = make('span')
+        const branches = item.flow.edges.filter(edge => edge.kind === 'branch').length
+        const meta = item.flow.nodes.length + ' 步' + (branches ? ' · ' + branches + ' 个分支' : '')
+        label.append(make('strong', item.flow.title), make('small', meta))
+        const arrow = make('span', '→', 'group-arrow')
+        arrow.setAttribute('aria-hidden', 'true')
+        link.append(label, arrow)
+        row.append(link)
+        return row
+      }))
+      drawMap()
+      if (focus) title.focus()
+    }
+
+    function canvasLayer(canvas) {
+      const box = canvas.getBoundingClientRect()
+      if (!box.width || !box.height) return
+      const scale = Math.min(devicePixelRatio, 2, 4096 / Math.max(box.width, box.height))
+      canvas.width = Math.ceil(box.width * scale)
+      canvas.height = Math.ceil(box.height * scale)
+      const pen = canvas.getContext('2d')
+      if (!pen) return
+      pen.scale(scale, scale)
+      pen.lineJoin = 'round'
+      return { box, pen }
+    }
+
+    function drawMap() {
+      if (mode !== 'overview') return
+      const layer = canvasLayer(mapCanvas)
+      if (!layer) return
+      const { box, pen } = layer
+      const root = mapRoot.getBoundingClientRect()
+      const rootY = (root.top + root.bottom) / 2 - box.top
+      const baseColor = getComputedStyle(mapCanvas).color
+      const active = groupChoices.get(current.group.id)
+      const options = [...groupChoices.values()].filter(choice => choice !== active)
+      options.push(active)
+      for (const choice of options) {
+        const area = choice.getBoundingClientRect()
+        const y = (area.top + area.bottom) / 2 - box.top
+        pen.beginPath()
+        pen.strokeStyle = choice === active ? getComputedStyle(choice).borderLeftColor : baseColor
+        pen.lineWidth = choice === active ? 2.6 : 1.3
+        if (narrow.matches) {
+          pen.moveTo(root.left - box.left, rootY)
+          pen.lineTo(15, rootY)
+          pen.lineTo(15, y)
+          pen.lineTo(area.left - box.left, y)
+        } else {
+          const left = area.right <= root.left
+          const start = (left ? root.left : root.right) - box.left
+          const end = (left ? area.right : area.left) - box.left
+          const bend = (start + end) / 2
+          pen.moveTo(start, rootY)
+          pen.lineTo(bend, rootY)
+          pen.lineTo(bend, y)
+          pen.lineTo(end, y)
+        }
+        pen.stroke()
+      }
+    }
+
+    function navigation() {
+      const term = by('search').value.trim().toLowerCase()
+      by('flows').replaceChildren()
+      for (const { group, items } of groups) {
+        const matches = items.filter(item => (
+          group.title + ' ' + item.flow.title + ' ' + item.flow.summary
+        ).toLowerCase().includes(term))
+        if (!matches.length) continue
+        const section = make('details')
+        section.open = Boolean(term) || current.group === group
+        const heading = make('summary', group.title)
+        heading.dataset.reviewGroup = group.id
+        section.append(heading)
+        for (const item of matches) {
+          const action = button(item.flow.title, 'nav-button', () => activate(mode, item, true))
+          if (item.key === current.key) action.setAttribute('aria-current', 'page')
+          section.append(action)
+        }
+        by('flows').append(section)
+      }
+      if (!by('flows').children.length) by('flows').append(make('p', '找不到匹配的线路', 'muted'))
+    }
+
+    function renderRelations() {
+      const { group, flow, key } = current
+      by('relations-group').textContent = group.title
+      by('relations-title').textContent = flow.title
+      const content = by('relations-content')
+      const { incoming, outgoing } = connections.get(key)
+      const processLink = button('查看操作流程 →', 'relation', () => activate('process', current, true))
+      if (!incoming.length && !outgoing.length) {
+        const blank = make('div', '', 'empty-relations')
+        blank.append(make('p', linkCount ? '这条线路暂无已记录的跨线路关系。' : '这份图谱暂无已记录的跨线路关系。', 'muted'), processLink)
+        content.replaceChildren(blank)
+        return
+      }
+      function side(title, entries, incoming) {
+        const column = make('section', '', 'relations-side')
+        column.append(make('h3', title))
+        if (!entries.length) {
+          column.append(make('p', '暂无记录', 'muted'))
+          return column
+        }
+        const list = make('ul', '', 'relations-list')
+        for (const { item, kind } of entries) {
+          const type = kind === 'continues' ? (incoming ? '前序线路' : '后续线路') : (incoming ? '使用方' : '所用线路')
+          const link = button('', 'relation-entry', () => activate('relations', item, true))
+          link.dataset.direction = incoming ? 'in' : 'out'
+          link.dataset.kind = kind
+          link.append(make('small', type, 'relation-type ' + kind), make('span', item.flow.title), make('small', item.group.title))
+          const row = make('li')
+          row.append(link)
+          list.append(row)
+        }
+        column.append(list)
+        return column
+      }
+      const map = make('div', '', 'relations-map')
+      const canvas = make('canvas', '', 'map-wires')
+      canvas.setAttribute('aria-hidden', 'true')
+      const center = make('section', '', 'relations-current')
+      center.append(make('h3', '当前线路'), make('strong', flow.title), processLink)
+      map.append(canvas, side('指向当前线路', incoming, true), center, side('当前线路指向', outgoing, false))
+      const legend = make('div', '', 'relations-legend')
+      const kinds = new Set([...incoming, ...outgoing].map(entry => entry.kind))
+      if (kinds.has('continues')) legend.append(make('span', '接续'))
+      if (kinds.has('uses')) legend.append(make('span', '使用', 'uses'))
+      content.replaceChildren(map, legend)
+      drawRelations()
+    }
+
+    function drawRelations() {
+      if (mode !== 'relations') return
+      const canvas = by('relations-content').querySelector('canvas')
+      if (!canvas) return
+      const layer = canvasLayer(canvas)
+      if (!layer) return
+      const { box, pen } = layer
+      const center = by('relations-content').querySelector('.relations-current').getBoundingClientRect()
+      for (const direction of ['in', 'out']) {
+        const entries = [...by('relations-content').querySelectorAll('[data-direction="' + direction + '"]')]
+        entries.forEach((entry, index) => {
+          const rect = entry.getBoundingClientRect()
+          const cardY = (rect.top + rect.bottom) / 2 - box.top
+          const centerY = center.top - box.top + center.height * (index + 1) / (entries.length + 1)
+          const incoming = direction === 'in'
+          const x1 = (incoming ? rect.right : center.right) - box.left
+          const x2 = (incoming ? center.left : rect.left) - box.left - 1
+          const y1 = incoming ? cardY : centerY, y2 = incoming ? centerY : cardY
+          const bend = (x1 + x2) / 2
+          pen.strokeStyle = pen.fillStyle = getComputedStyle(entry.firstElementChild).color
+          pen.lineWidth = 1.6
+          pen.setLineDash(entry.dataset.kind === 'uses' ? [4, 3] : [])
+          pen.beginPath()
+          pen.moveTo(x1, y1)
+          pen.bezierCurveTo(bend, y1, bend, y2, x2 - 5, y2)
+          pen.stroke()
+          pen.beginPath()
+          pen.moveTo(x2, y2)
+          pen.lineTo(x2 - 6, y2 - 3)
+          pen.lineTo(x2 - 6, y2 + 3)
+          pen.fill()
+        })
+      }
+    }
+
+    function advance(edge) {
+      guide.edges.push(edge)
+      showStep(edge.to)
+      by('guide-status').focus({ preventScroll: true })
+    }
+
+    function pickStep(id) {
+      if (!guide) return showStep(id)
+      const possible = current.flow.edges.filter(edge => edge.from === selected && edge.to === id)
+      if (possible.length === 1) advance(possible[0])
+      if (possible.length > 1) by('guide-choices').querySelector('button')?.focus()
+    }
+
+    function renderGuide() {
+      const toggle = by('guide-toggle'), back = by('guide-back'), choices = by('guide-choices'), status = by('guide-status')
+      toggle.textContent = guide ? '结束导览' : '从这一步开始导览'
+      toggle.setAttribute('aria-pressed', Boolean(guide))
+      const next = guide ? current.flow.edges.filter(edge => edge.from === selected) : []
+      const canGoTo = new Set(next.map(edge => edge.to))
+      const visited = new Set(guide ? [guide.start, ...guide.edges.map(edge => edge.to)] : [])
+      for (const [id, card] of cards) {
+        card.disabled = Boolean(guide) && id !== selected && !canGoTo.has(id)
+        card.classList.toggle('on-route', visited.has(id))
+        card.classList.toggle('next-step', canGoTo.has(id))
+      }
+      back.hidden = !guide
+      back.disabled = !guide?.edges.length
+      status.textContent = guide ? '已走 ' + (guide.edges.length + 1) + ' 步 · ' +
+        (next.length ? '选择接下来的一步' : '已到达结束步骤') : ''
+      choices.hidden = !next.length
+      choices.replaceChildren(...next.map(edge => {
+        const title = current.flow.nodes.find(node => node.id === edge.to).title
+        const condition = edge.label ?? (edge.kind === 'branch' ? '条件未记录' : '')
+        return button((condition ? condition + ' → ' : '前往 ') + title, 'guide-control', () => advance(edge))
+      }))
+    }
+
+    const stepsByDocument = new Map()
+    for (const group of data.groups) {
+      for (const flow of group.flows) {
+        for (const node of flow.nodes) {
+          for (const path of new Set(node.sources.filter(source => source.kind === 'documentation' && !source.status).map(source => source.path))) {
+            if (!stepsByDocument.has(path)) stepsByDocument.set(path, [])
+            stepsByDocument.get(path).push({ key: group.id + '/' + flow.id + '/' + node.id, title: flow.title + ' · ' + node.title })
+          }
+        }
+      }
+    }
+
+    function renderEvidence(node, title, references) {
+      if (!references.length) return
+      const list = make('ul', '', 'refs')
+      for (const source of references) {
+        const row = make('li')
+        const label = make(source.preview ? 'summary' : 'span', kinds[source.kind] + ' · ')
+        label.append(make('code', source.path + (source.line ? ':' + source.line : '')))
+        if (source.symbol) {
+          const kind = { call: '调用处', import: '导入处' }[source.symbol.kind] ?? '源码符号'
+          label.append(make('span', ' · ' + kind + ' ' + source.symbol.name))
+        }
+        if (source.status === 'needs-review') label.append(make('span', ' · 证据待复核', 'muted'))
+        if (source.preview) {
+          const disclosure = make('details')
+          const text = source.preview.text.split('\n').map((line, index) => (source.preview.startLine + index) + '  ' + line)
+          disclosure.append(label, make('pre', text.join('\n'), 'evidence-preview'))
+          row.append(disclosure)
+        } else row.append(label)
+        if (source.kind === 'documentation' && !source.status) {
+          const others = (stepsByDocument.get(source.path) ?? []).filter(step => step.key !== current.key + '/' + node.id)
+          const related = others.slice(0, 5).map(step => {
+            const link = make('a', step.title, 'relation')
+            link.href = '#step/' + step.key
+            return link
+          })
+          if (related.length) row.append(make('p', '也引用此文档的步骤', 'muted'), ...related)
+        }
+        list.append(row)
+      }
+      detail.append(make('h3', title), list)
+    }
+
+    function showStep(id) {
+      const { flow } = current
+      const node = flow.nodes.find(item => item.id === id)
+      selected = id
+      selectedByFlow.set(current.key, id)
+      hideTooltip()
+      for (const [key, card] of cards) card.setAttribute('aria-pressed', key === id)
+      renderGuide()
+      detail.replaceChildren(reviewText('h2', node.title, id), reviewText('p', node.summary, id))
+      if (node.details.length) {
+        const list = make('ul')
+        list.append(...node.details.map(value => reviewText('li', value, id)))
+        detail.append(make('h3', '实现说明'), list)
+      }
+      renderEvidence(node, '源码与测试', node.sources.filter(source => source.kind !== 'documentation'))
+      renderEvidence(node, '相关文档', node.sources.filter(source => source.kind === 'documentation'))
+      if (data.documentRoot || data.review) {
+        const link = make('a', '在项目文档中查看这一步 →', 'relation')
+        const documentHref = data.review
+          ? '?' + new URLSearchParams({ workspace: data.review.workspace, doc: current.group.id })
+          : data.documentRoot + current.group.id + '.html'
+        link.href = documentHref + '#' + flow.id + '--' + node.id
+        detail.append(link)
+      }
+      function adjacent(title, edges, key) {
+        if (!edges.length) return
+        detail.append(make('h3', title))
+        for (const edge of edges) {
+          const target = flow.nodes.find(item => item.id === edge[key])
+          const label = edge.label ? target.title + ' · ' + edge.label : target.title
+          detail.append(button(label, 'relation', () => {
+            showStep(target.id)
+            cards.get(target.id).focus()
+          }))
+        }
+      }
+      if (!guide) {
+        adjacent('接下来', flow.edges.filter(edge => edge.from === id), 'to')
+        adjacent('前一步', flow.edges.filter(edge => edge.to === id), 'from')
+      }
+      const { incoming, outgoing } = connections.get(current.key)
+      if (incoming.length || outgoing.length) {
+        detail.append(make('h3', '跨线路关系'),
+          button('查看 ' + (incoming.length + outgoing.length) + ' 条关系 →', 'relation', () => activate('relations', current, true)))
+      }
+      if (data.review) {
+        const draftLink = make('a', '在草稿中批注这一步 →', 'relation')
+        draftLink.href = '?' + new URLSearchParams({
+          workspace: data.review.workspace, drafts: '1', group: current.group.id, flow: flow.id, step: id,
+        })
+        detail.append(draftLink)
+      }
+      draw()
+    }
+
+    function draw() {
+      if (mode !== 'process') return
+      const rect = graph.getBoundingClientRect()
+      const walked = new Set(guide?.edges)
+      wires.replaceChildren()
+      current.flow.edges.forEach((edge, i) => {
+        const a = cards.get(edge.from).getBoundingClientRect(), b = cards.get(edge.to).getBoundingClientRect()
+        const x1 = (a.left + a.right) / 2 - rect.left, x2 = (b.left + b.right) / 2 - rect.left
+        const y1 = a.bottom - rect.top, y2 = b.top - rect.top - 4
+        const reverse = y2 <= y1
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+        if (reverse) {
+          const side = 8 + (i % 3) * 4
+          const ax = a.left - rect.left, bx = b.left - rect.left - 4
+          const ay = (a.top + a.bottom) / 2 - rect.top, by = (b.top + b.bottom) / 2 - rect.top
+          path.setAttribute('d', ['M', ax, ay, 'H', side, 'V', by, 'H', bx].join(' '))
+        } else {
+          const middle = (y1 + y2) / 2
+          path.setAttribute('d', ['M', x1, y1, 'V', middle, 'H', x2, 'V', y2].join(' '))
+        }
+        const classes = ['wire']
+        if (reverse) classes.push('return-edge')
+        if (walked.has(edge)) classes.push('walked')
+        else if (edge.from === selected || (!guide && edge.to === selected)) classes.push('selected')
+        else if (guide) classes.push('outside')
+        path.setAttribute('class', classes.join(' '))
+        path.setAttribute('marker-end', 'url(#arrow)')
+        wires.append(path)
+      })
+    }
+
+    function renderProcess() {
+      const { group, flow } = current
+      by('process-group').textContent = group.title
+      withTerms(by('title'), flow.title)
+      withTerms(by('summary'), flow.summary)
+      cards.clear()
+      lanes.replaceChildren()
+      const hasPredecessor = new Set(flow.edges.map(edge => edge.to))
+      const hasSuccessor = new Set(flow.edges.map(edge => edge.from))
+      const branchPoints = new Set(flow.edges.filter(edge => edge.kind === 'branch').map(edge => edge.from))
+      for (const row of flow.layout.rows) {
+        const lane = make('div', '', 'lane')
+        for (const id of row) {
+          const node = flow.nodes.find(step => step.id === id)
+          const card = button('', 'step', () => pickStep(id))
+          const entry = !hasPredecessor.has(id), exit = !hasSuccessor.has(id)
+          if (branchPoints.has(id)) card.append(make('span', entry ? '起点 · 分岔' : '分岔', 'step-role branch'))
+          else if (entry || exit) card.append(make('span', entry && exit ? '单步流程' : entry ? '起点' : '结束', 'step-role ' + (entry ? 'entry' : 'end')))
+          const conditions = flow.edges.filter(edge => edge.to === id && edge.kind === 'branch' && edge.label)
+          if (conditions.length === 1) card.append(make('span', conditions[0].label, 'condition'))
+          const title = make('strong', node.title), summary = make('span', node.summary)
+          if (data.review) title.dataset.reviewText = summary.dataset.reviewText = id
+          card.append(title, summary)
+          cards.set(id, card)
+          lane.append(card)
+        }
+        lanes.append(lane)
+      }
+      const entry = flow.layout.rows.flat().find(id => !hasPredecessor.has(id))
+      showStep(selectedByFlow.get(current.key) ?? entry ?? flow.layout.rows[0][0])
+    }
+
+    function activate(view, item, focusHeading = false, writeHistory = true) {
+      mode = view
+      current = item
+      if (guide && guide.key !== current.key) guide = null
+      hideTooltip()
+      by('workspace').dataset.view = document.body.dataset.view = mode
+      by('overview-panel').hidden = mode !== 'overview'
+      by('process-panel').hidden = detail.hidden = mode !== 'process'
+      by('relations-panel').hidden = mode !== 'relations'
+      by('navigation').hidden = mode === 'overview'
+      for (const control of viewButtons) {
+        if (control.dataset.view === mode) control.setAttribute('aria-current', 'page')
+        else control.removeAttribute('aria-current')
+      }
+      if (mode === 'overview') showGroup(groupById.get(current.group.id))
+      else navigation()
+      if (mode === 'process') renderProcess()
+      if (mode === 'relations') renderRelations()
+      if (mode !== 'overview' && narrow.matches) by('navigator').open = false
+      const hash = mode === 'overview' ? 'overview' : (mode === 'relations' ? 'relations/' : '') + item.key
+      if (writeHistory && location.hash !== '#' + hash) history.pushState(null, '', '#' + hash)
+      if (focusHeading) {
+        const heading = by(mode === 'process' ? 'title' : 'relations-title')
+        heading.tabIndex = -1
+        heading.focus()
+      }
+    }
+
+    function restoreView() {
+      const hash = location.hash.slice(1)
+      const step = /^step\/([^/]+)\/([^/]+)\/([^/]+)$/.exec(hash)
+      const processItem = itemByKey.get(step ? step[1] + '/' + step[2] : hash)
+      const relationItem = hash.startsWith('relations/') && itemByKey.get(hash.slice('relations/'.length))
+      if (processItem) {
+        if (step && processItem.flow.nodes.some(node => node.id === step[3])) selectedByFlow.set(processItem.key, step[3])
+        activate('process', processItem, false, false)
+      }
+      else if (relationItem) activate('relations', relationItem, false, false)
+      else activate('overview', current, false, false)
+    }
+
+    renderOverview()
+    for (const control of viewButtons) {
+      control.addEventListener('click', () => activate(control.dataset.view, current))
+    }
+    by('navigator').open = !narrow.matches
+    narrow.addEventListener('change', event => { by('navigator').open = !event.matches })
+    window.addEventListener('hashchange', restoreView)
+    by('search').addEventListener('input', navigation)
+    by('guide-toggle').addEventListener('click', () => {
+      guide = guide ? null : { key: current.key, start: selected, edges: [] }
+      showStep(selected)
+    })
+    by('guide-back').addEventListener('click', () => {
+      const edge = guide.edges.pop()
+      showStep(edge.from)
+      by('guide-status').focus({ preventScroll: true })
+    })
+    try { beginner.checked = localStorage.getItem('threadlight-beginner') === 'on' } catch {}
+    beginner.addEventListener('change', () => {
+      try { localStorage.setItem('threadlight-beginner', beginner.checked ? 'on' : 'off') } catch {}
+      if (mode !== 'process') return
+      withTerms(by('title'), current.flow.title)
+      withTerms(by('summary'), current.flow.summary)
+      showStep(selected)
+    })
+    tooltip.addEventListener('pointerenter', () => clearTimeout(closeTimer))
+    tooltip.addEventListener('pointerleave', scheduleTooltipClose)
+    document.addEventListener('pointerdown', event => {
+      if (activeTerm && !activeTerm.contains(event.target) && !tooltip.contains(event.target)) hideTooltip()
+    })
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && activeTerm) hideTooltip()
+    })
+    window.addEventListener('resize', positionTooltip)
+    window.addEventListener('scroll', positionTooltip)
+    restoreView()
+    new ResizeObserver(draw).observe(graph)
+    new ResizeObserver(drawMap).observe(mapBoard)
+    new ResizeObserver(drawRelations).observe(by('relations-content'))
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      drawMap()
+      drawRelations()
+    })
+    if (data.review) window.ThreadlightReview.mount(data, () => current)
+  </script>
+</body>
+</html>

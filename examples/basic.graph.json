@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "project": { "name": "Threadlight 导出示例" },
+  "groups": [
+    {
+      "id": "export",
+      "title": "导出项目图谱",
+      "summary": "检查项目图谱的结构，再生成 Obsidian 可读的笔记和画布。",
+      "flows": [
+        {
+          "id": "obsidian",
+          "title": "在 Obsidian 打开图谱",
+          "summary": "从读取图谱，到在 Obsidian 打开项目总览。",
+          "nodes": [
+            {
+              "id": "validate",
+              "title": "读取并验证图谱",
+              "summary": "检查版本、节点编号和连线目标。",
+              "details": ["图谱无效时返回明确的字段或引用错误。"],
+              "sources": [{ "path": "lib/graph.mjs", "kind": "source" }]
+            },
+            {
+              "id": "write",
+              "title": "写入快照",
+              "summary": "生成链接笔记和 Canvas，最后写导出清单。",
+              "details": ["同一版本重复导出时复用原快照。"],
+              "sources": [{ "path": "lib/obsidian.mjs", "kind": "source" }]
+            },
+            {
+              "id": "reject",
+              "title": "指出需要修正的位置",
+              "summary": "显示无效字段或引用，供读者修改原始图谱。",
+              "details": ["校验在创建导出文件之前完成。"],
+              "sources": [{ "path": "tests/export.test.mjs", "kind": "test" }]
+            }
+          ],
+          "edges": [
+            { "from": "validate", "to": "write", "kind": "branch", "label": "图谱有效" },
+            { "from": "validate", "to": "reject", "kind": "branch", "label": "字段或引用无效" }
+          ]
+        }
+      ]
+    }
+  ]
+}

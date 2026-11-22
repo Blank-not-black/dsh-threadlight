@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN" data-page="{{view}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>{{title}} · Threadlight</title>
+  <link rel="stylesheet" href="launch.css">
+  <script src="launch.js" defer></script>
+</head>
+<body class="workspace-page">
+  <header class="workspace-header">
+    <a class="workspace-home" href="./" aria-label="返回 Threadlight 首页">Threadlight</a>
+    <nav aria-label="工作区">
+      <a href="?view=create"{{create-current}}>创建新工作区</a>
+      <a href="?view=workspaces"{{workspaces-current}}>进入已有工作区</a>
+    </nav>
+  </header>
+  <main class="workspace-main">
+    <h1>{{title}}</h1>
+    {{content}}
+  </main>
+</body>
+</html>

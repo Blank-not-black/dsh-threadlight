@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "project": { "name": "Threadlight" },
+  "groups": [
+    {
+      "id": "documentation",
+      "title": "文档生成",
+      "summary": "根据 Git 工作树的实际变动生成或更新项目文档。",
+      "flows": [
+        {
+          "id": "refresh",
+          "title": "刷新项目文档",
+          "summary": "读取当前工作树，由独立 DSH 会话分析，再发布一份可浏览的图谱。",
+          "nodes": [
+            {
+              "id": "capture",
+              "title": "采集工作树",
+              "summary": "读取满足采集规则的文件，包括尚未提交的本地编辑。",
+              "details": [],
+              "sources": [
+                { "path": "lib/git-workspace.mjs", "kind": "source", "line": 32 },
+                { "path": "lib/refresh.mjs", "kind": "source", "line": 6 }
+              ]
+            },
+            {
+              "id": "review",
+              "title": "分析变更",
+              "summary": "在独立 DSH 会话里分析快照，返回要修订的线路和复核说明。",
+              "details": [],
+              "sources": [
+                { "path": "lib/document-session.mjs", "kind": "source" },
+                { "path": "docs/graph-format.md", "kind": "documentation", "line": 23 }
+              ]
+            },
+            {
+              "id": "publish",
+              "title": "发布查看器与文档",
+              "summary": "用户重新打开查看器就能看到新图谱及其 Markdown 文档。",
+              "details": ["发布前再次采集工作树，以确认分析期间的源码快照一致。"],
+              "sources": [{ "path": "lib/refresh.mjs", "kind": "source" }]
+            },
+            {
+              "id": "keep-previous",
+              "title": "保留上一版",
+              "summary": "终端报告失败原因，用户可继续查看上一次成功发布的图谱。",
+              "details": ["并发修改源码、缺少引用文件等错误都可能使刷新停止。"],
+              "sources": [
+                { "path": "lib/refresh.mjs", "kind": "source", "line": 144 },
+                { "path": "tests/refresh.test.mjs", "kind": "test", "line": 133 },
+                { "path": "docs/graph-format.md", "kind": "documentation", "line": 23 },
+                { "path": "README.md", "kind": "documentation", "line": 55 }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "capture", "to": "review", "kind": "sequence" },
+            { "from": "review", "to": "publish", "kind": "branch", "label": "补丁校验通过且工作树未变" },
+            { "from": "review", "to": "keep-previous", "kind": "branch", "label": "校验失败或工作树在分析期间变化" }
+          ],
+          "links": [
+            { "group": "graph", "flow": "validate", "kind": "uses" },
+            { "group": "delivery", "flow": "read", "kind": "continues" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "graph",
+      "title": "图谱校验",
+      "summary": "在写出文档前检查图谱结构及其内部引用。",
+      "flows": [
+        {
+          "id": "validate",
+          "title": "验证图谱结构",
+          "summary": "检查版本、节点编号、线路关系和分支连线的目标。",
+          "nodes": [
+            {
+              "id": "parse",
+              "title": "解析并校验 JSON",
+              "summary": "字段或引用有误时报告具体问题，校验通过的图谱可以交给渲染器。",
+              "details": [],
+              "sources": [
+                { "path": "lib/graph.mjs", "kind": "source" },
+                { "path": "tests/export.test.mjs", "kind": "test" }
+              ]
+            }
+          ],
+          "edges": []
+        }
+      ]
+    },
+    {
+      "id": "delivery",
+      "title": "阅读与导出",
+      "summary": "在 HTML 中查看流程，或把图谱放进 Obsidian。",
+      "flows": [
+        {
+          "id": "read",
+          "title": "在查看器中读图",
+          "summary": "从功能总览进入一条线路，跟随分支找到对应的实现或测试。",
+          "nodes": [
+            {
+              "id": "pick",
+              "title": "从功能区选择线路",
+              "summary": "打开查看器后，用户按用途找到对应的功能和操作入口。",
+              "details": [],
+              "sources": [{ "path": "lib/reader.html", "kind": "source" }]
+            },
+            {
+              "id": "inspect",
+              "title": "核对步骤证据",
+              "summary": "点选一个步骤，在详情中查看这一环节的行为、分支及源码位置。",
+              "details": [],
+              "sources": [{ "path": "lib/reader.html", "kind": "source" }]
+            }
+          ],
+          "edges": [{ "from": "pick", "to": "inspect", "kind": "sequence" }]
+        },
+        {
+          "id": "export",
+          "title": "导出 Obsidian 笔记",
+          "summary": "在 CLI 或 DSH 中将图谱转换为相互链接的 Markdown 和 Canvas。",
+          "nodes": [
+            {
+              "id": "write",
+              "title": "生成导出快照",
+              "summary": "校验成功后写入笔记与画布，用户可以在 Obsidian 打开项目总览。",
+              "details": ["完成的同一快照可以复用，用户对既有笔记的编辑会保留。"],
+              "sources": [
+                { "path": "index.mjs", "kind": "source" },
+                { "path": "lib/obsidian.mjs", "kind": "source" }
+              ]
+            }
+          ],
+          "edges": [],
+          "links": [{ "group": "graph", "flow": "validate", "kind": "uses" }]
+        }
+      ]
+    }
+  ]
+}

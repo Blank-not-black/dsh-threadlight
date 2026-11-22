@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>流程草稿 · Threadlight</title>
+  <link rel="stylesheet" href="drafts.css">
+  <script type="module" src="drafts.js"></script>
+</head>
+<body>
+  <header>
+    <div><p class="project" id="project"></p><h1>流程草稿</h1></div>
+    <p id="status" role="status" class="muted"></p>
+    <div class="actions">
+      <a id="back" href="?view=workspaces">切换工作区</a>
+      <button id="save" type="button">保存草稿</button>
+      <button id="submit" class="primary" type="button">提交给 DSH</button>
+    </div>
+  </header>
+  <main class="editor" id="editor">
+    <div class="diagram-toolbar">
+      <button type="button" data-sidebar="plan" aria-expanded="true" aria-controls="plan-panel">线路设置</button>
+      <div class="diagram-tools" role="group" aria-label="绘图工具">
+        <button id="add-step" type="button">添加步骤</button>
+        <div class="diagram-controls" id="diagram-controls" hidden>
+          <label class="step-picker">选中步骤 <select id="diagram-step"></select></label>
+          <div class="diagram-actions">
+            <button id="zoom-out" type="button" aria-label="缩小">−</button>
+            <button id="zoom-in" type="button" aria-label="放大">+</button>
+            <button id="fit-diagram" type="button">适应窗口</button>
+            <button id="auto-layout" type="button">自动布局</button>
+          </div>
+        </div>
+      </div>
+      <button type="button" data-sidebar="details" aria-expanded="true" aria-controls="details-panel">编辑详情</button>
+    </div>
+    <div class="workspace">
+      <aside class="sidebar plan" id="plan-panel" aria-labelledby="plan-title">
+        <div class="draft-library">
+          <label>打开草稿 <select id="draft-picker"><option value="">新草稿</option></select></label>
+          <button id="new-draft" type="button">新建线路</button>
+        </div>
+        <h2 id="plan-title">线路与验收</h2>
+        <p class="muted" id="base" hidden></p>
+        <div class="plan-fields">
+          <label>线路名称 <input id="flow-title" maxlength="160" placeholder="例如上传文件"></label>
+          <label>目标与范围 <textarea id="flow-summary" maxlength="6000" rows="3" placeholder="用户要完成什么"></textarea></label>
+          <label>验收条件 <textarea id="acceptance" maxlength="6000" rows="3" placeholder="怎样操作，看到什么结果就算完成"></textarea></label>
+        </div>
+      </aside>
+      <section class="diagram" aria-label="操作流程">
+        <div class="canvas" id="canvas" tabindex="0" aria-label="流程图画布" aria-describedby="diagram-hint">
+          <p class="empty-diagram muted" id="empty-diagram">点击「添加步骤」开始绘制流程。</p>
+        </div>
+      </section>
+      <aside class="sidebar details" id="details-panel" aria-label="步骤、连线与批注">
+        <div class="inspector" id="inspector"></div>
+      </aside>
+    </div>
+    <p class="muted diagram-hint" id="diagram-hint">拖动步骤调整位置。把连接点拖到另一步骤。选中连线后可拖动端点和折线，也可用方向键微调折线。</p>
+  </main>
+  <script type="application/json" id="draft-context">"THREADLIGHT_DRAFT_CONTEXT"</script>
+</body>
+</html>
