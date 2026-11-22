@@ -17,7 +17,13 @@
     <a id="return" href="./">返回图谱</a>
   </header>
   <main id="notes" aria-label="项目批注">
-    <p id="empty" hidden>这个项目还没有批注。<a id="empty-return" href="./">返回图谱</a></p>
+    <section id="empty" class="empty-state" hidden>
+      <h2 id="empty-title">这个项目还没有批注</h2>
+      <p id="empty-hint">在查看器里右键模块或步骤，或选中一段文字后批注。批注可以直接提交给 DSH，不需要先改流程图。</p>
+      <div class="empty-actions">
+        <a id="empty-return" class="button" href="./">返回图谱</a>
+      </div>
+    </section>
     <div id="groups"></div>
   </main>
   <footer>

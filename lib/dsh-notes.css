@@ -46,6 +46,14 @@ footer { border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; alig
 #status { flex: 1 1 20rem; color: var(--quiet); }
 #status:empty { flex-basis: 0; }
 #status.error { color: var(--error); }
+/* Empty state: one clear next action instead of a bare sentence. */
+.empty-state { padding: 26px clamp(18px, 3vw, 30px); max-width: 58rem; margin: 0 auto; }
+.empty-state h2 { font-size: 1.15rem; margin-bottom: 8px; }
+.empty-state p { color: var(--quiet); max-width: 46rem; }
+.empty-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.button { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 7px; border: 1px solid var(--line); color: var(--ink); text-decoration: none; background: var(--paper); }
+.button:hover { border-color: var(--accent); color: var(--accent); }
+body.is-empty footer { display: none; }
 .submit-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 button { font: inherit; font-weight: 600; background: var(--accent); color: var(--panel); border: 1px solid var(--accent); padding: 8px 14px; border-radius: 7px; cursor: pointer; }
 button:disabled { color: var(--quiet); background: var(--highlight); border-color: var(--line); cursor: default; }

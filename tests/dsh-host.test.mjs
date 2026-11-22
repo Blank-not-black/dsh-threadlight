@@ -336,16 +336,24 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   const sessionEntry = new URL('threadlight/?session=' + noteReceipt.sessionId, result.base)
   const sessionRedirect = await fetch(sessionEntry, { headers: { cookie }, redirect: 'manual' })
   assert.equal(sessionRedirect.status, 303)
-  assert.equal(new URL(sessionRedirect.headers.get('location'), result.base).search,
-    '?workspace=' + encodeURIComponent(reviewWorkspace))
+  const sessionLocation = new URL(sessionRedirect.headers.get('location'), result.base)
+  // Path matters: a relative location would resolve under /threadlight/ again.
+  assert.equal(sessionLocation.pathname, '/threadlight/')
+  assert.equal(sessionLocation.search, '?workspace=' + encodeURIComponent(reviewWorkspace))
   const sessionNotes = await fetch(new URL('threadlight/?session=' + noteReceipt.sessionId + '&view=notes', result.base),
     { headers: { cookie }, redirect: 'manual' })
   assert.equal(sessionNotes.status, 303)
-  assert.equal(new URL(sessionNotes.headers.get('location'), result.base).search,
-    '?notes=' + encodeURIComponent(reviewWorkspace))
+  const sessionNotesLocation = new URL(sessionNotes.headers.get('location'), result.base)
+  assert.equal(sessionNotesLocation.pathname, '/threadlight/')
+  assert.equal(sessionNotesLocation.search, '?notes=' + encodeURIComponent(reviewWorkspace))
   const unknownSession = await fetch(new URL('threadlight/?session=' + randomUUID(), result.base),
     { headers: { cookie } })
   assert.equal(unknownSession.status, 200)
+  // A missed page navigation renders a readable page, not the JSON API error.
+  const missingPage = await fetch(new URL('threadlight/threadlight/', result.base),
+    { headers: { cookie, accept: 'text/html' } })
+  assert.equal(missingPage.status, 404)
+  assert.match(missingPage.headers.get('content-type'), /text\/html/)
   assert.equal(noteEvents.prompts.length, 1)
   const queuedNotes = JSON.stringify(noteEvents.prompts[0])
   assert.match(queuedNotes, /用户只提交了批注，没有修改流程图/)
