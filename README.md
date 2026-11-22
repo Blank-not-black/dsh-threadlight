@@ -57,6 +57,17 @@ node bin/dsh-threadlight.mjs watch D:/your-project --patch D:/config/threadlight
 - 每次变动使用新的 DSH headless 会话和临时源码副本。会话调用 `threadlight-document-project`，收到变更文件列表、原图谱和受影响线路，交回补丁。结果中的 `affectedFlows` 和 `flowChanges` 分别报告受影响线路数和实际新增、修改、删除数量。`updated` 表示文档内容或引用定位有改动，`reviewed` 表示已处理新源码快照且文档内容与定位相同，`unchanged` 表示无需启动文档会话。无法可靠重新定位的旧证据会显示「证据待复核」。
 - 若生成失败，图谱查看器继续使用上一次成功发布的版本。监听会等下一个源码快照，也可以手动用 `refresh` 重试。
 
+### 把实现结果回挂到图谱
+
+从已发布线路建立草稿并提交后，DSH 实现会话会按步骤将源码位置、实际验证结果和与预期的差异写入 `.threadlight/implementation/<草稿 ID>/<版本>.json`。实现会话完成后，先运行 `report`，再运行 `refresh`。
+
+~~~powershell
+node bin/dsh-threadlight.mjs report D:/your-project
+node bin/dsh-threadlight.mjs refresh D:/your-project --patch D:/config/threadlight-model.json
+~~~
+
+`report` 用当前工作树定位报告里的证据，在查看器和项目 Markdown 中发布步骤状态与验证记录，并输出已应用、跳过和拒绝的报告。已有报告内容未变时会跳过。同一报告中当前线路缺失的步骤会在 `skippedSteps` 中列出。随后 `refresh` 会继续审阅实现产生的源码改动，并保留对应步骤的回流字段。也可为 `report` 传入 `--code-index` 补充源码符号。
+
 ### 采集范围
 
 支持 UTF-8 文本文件，单文件最多 4 MiB，采集总量最多 48 MiB。扩展名支持 `.md`、`.js`、`.mjs`、`.cjs`、`.jsx`、`.ts`、`.tsx`、`.json`、`.json5`、`.yaml`、`.yml`、`.html`、`.css`、`.py`、`.java`、`.kt`、`.kts`、`.ets`、`.rs`、`.go`、`.sh`、`.ps1`、`.toml`、`.xml`、`.gradle`、`.sql`、`.cs`、`.c`、`.cc`、`.cpp`、`.cxx`、`.h`、`.hh`、`.hpp`、`.hxx`、`.rb`、`.php`、`.swift`、`.dart`、`.vue`、`.svelte`，另支持 `Dockerfile` 和 `Makefile`。

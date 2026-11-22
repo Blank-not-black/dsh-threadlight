@@ -9,7 +9,7 @@
 | 术语 | glossary 为对象数组。term 是正文中的词，最长 64 字符。definition 是单行解释，最长 360 字符 |
 | 功能区 | id、title、flows，可选 summary |
 | 线路 | id、title、summary、nodes、edges，可选 layout.rows 和 links |
-| 实现节点 | id、title、summary、details、sources |
+| 实现节点 | id、title、summary、details、sources。宿主可写入 state、verification 和 divergence |
 | 证据 | path、kind，可选正整数 line。kind 可取 source、test、documentation、workflow。宿主可写入 anchor、status、preview 和 symbol |
 | 步骤连线 | from、to、kind。kind 可取 sequence、branch、merge。可选 label 表述走这条边的条件 |
 | 跨线路链接 | group、flow、kind。目标为另一条已定义线路，kind 可取 uses、continues |
@@ -32,6 +32,18 @@ refresh 为带行号的证据写入 anchor。lineHash 是引用行的 SHA-256，
 
 查看器按步骤展示源码、测试和相关文档。同一份源文档可以关联多个步骤，查看器提供返回其他引用步骤的入口。功能区文档使用稳定锚点 flow--step，链接回图谱的 `#step/<group>/<flow>/<step>`。DSH 查看器和离线查看器都可打开对应文档段落。离线快照同时保存同结构的 Markdown 供编辑器使用。
 
+### 步骤状态与验证
+
+以下节点字段均可省略，图谱仍使用 schemaVersion 1。
+
+| 字段 | 类型与约束 |
+| --- | --- |
+| state | 字符串。planned 显示「计划」，implemented 显示「有实现依据」，verified 显示「已实际验证」。省略时，有 sources 就显示「有实现依据」，其余显示「计划」。派生状态只用于展示 |
+| verification | 数组，最多 20 项。每项包含 id、at、result、summary 和可选的 command。id 是节点内唯一的小写 slug，最长 64 字符。at 为最长 40 字符的单行 ISO-8601 时间，可用 Date.parse 解析。result 取 passed 或 failed。summary 和 command 为非空单行文本，分别最长 360 和 512 字符 |
+| divergence | 文本，最多 2000 字符。记录与草稿预期的差异或需要继续核实的结果 |
+
+只有 state 为 verified 时才可填写 verification，且至少有一项 passed。仅有失败结果时可在 divergence 中说明实际情况。文档会话省略这三个宿主管理字段。合并文档会话结果时，沿用同一 group、flow、node ID 时保留原字段。
+
 ## 流程草稿
 
 DSH Web 将流程草稿保存在工作区的 `.threadlight/drafts/<草稿 ID>/<版本>.json`。草稿有独立的 schemaVersion 1，记录 id、version、时间、plan 和可选的 base。复制已有线路时，base 记录原图谱摘要、线路标识、原始流程和证据。保存按版本追加，既有实现图谱继续作为阅读和导出的依据。
@@ -41,6 +53,36 @@ plan 包含线路名称、目标与范围、验收条件、步骤、连线和批
 草稿可用 plan.layout 保存手动放置的步骤位置，每项包含 step、x 和 y。连线可用 waypoints 保存有序的折线控制点，每条线最多 64 个。坐标使用画布单位，范围为 −100000 到 100000。旧草稿中的 bend 仍可读取，按原有横向比例和两端之间的相对高度映射为控制点。实现提示词与行为差异使用步骤内容、连线端点、类型和条件。
 
 提交使用保存的版本。版本对应的 submission 和 submitted 记录分别保存待提交任务及宿主接收回执，重试复用会话和请求标识。回执表示提示词已被 DSH 接收，后续执行和验证进度在该工作区的 DSH 会话中查看。
+
+## 实现报告
+
+DSH 实现会话把 UTF-8 JSON 写到仓库的 `.threadlight/implementation/<草稿 ID>/<版本>.json`。草稿 ID 为 UUID，版本为正整数。报告结构如下。
+
+~~~json
+{
+  "schemaVersion": 1,
+  "draft": { "id": "50663508-feb0-4d94-8ae7-535cd01cb868", "version": 3 },
+  "generatedAt": "2026-11-22T04:30:00.000Z",
+  "summary": "实现了上传后的重试操作。",
+  "steps": [
+    {
+      "step": "retry",
+      "state": "verified",
+      "sources": [{ "path": "lib/upload.mjs", "kind": "source", "line": 12 }],
+      "verification": [
+        { "id": "check", "at": "2026-11-22T04:29:00.000Z", "result": "passed", "summary": "重试用例通过。", "command": "npm run check" }
+      ],
+      "divergence": "重试按钮只在网络错误时显示。"
+    }
+  ]
+}
+~~~
+
+generatedAt 使用与验证记录相同的时间格式。summary 为可选文本，最长 2000 字符。steps 含 1 至 200 项，step 必须是该草稿 plan.nodes 中的 ID，且报告内唯一。每项提供 sources 数组，遵循图谱证据约定并替换原数组，提供空数组可清空原证据。state、verification 和 divergence 按图谱约定校验，省略时沿用目标步骤原值。实现会话只列出实际运行的验证。
+
+`report` 查找匹配的草稿版本及提交回执，再根据草稿 base 的 group 和 flow 在已发布的 refresh 图谱中定位目标线路。缺少匹配记录、基线或目标线路时跳过该报告。实现期间图谱版本可以变化，当前线路按步骤 ID 匹配。当前图谱中缺失的步骤会列入 skippedSteps，报告中的其他有效步骤仍可发布。整份报告没有可应用的步骤时会跳过，可在图谱补齐步骤后重跑。
+
+先运行 `report` 更新步骤并按当前工作树重新锚定证据，再运行 `refresh` 审阅源码变更。报告发布新的查看器和文档版本，在 state.json 中只更新 revision，保留原源码快照与文档会话记录。发布成功后，`<版本>.applied.json` 保存 reportHash（报告原文件的 SHA-256）、revision 和 at。文件摘要相同时跳过，摘要改变时重新校验。CLI 输出 applied、skipped、rejected 和当前 revision，有拒绝项时退出码为 1。
 
 ## Obsidian 文档与连线约定
 
@@ -60,7 +102,7 @@ plan 包含线路名称、目标与范围、验收条件、步骤、连线和批
 
 ## 快照
 
-输入最多 8 MiB。导出按输入内容和导出格式计算 SHA-256，在输出根下建立 threadlight-<摘要前缀>。threadlight-export.json 最后写入，表示本次导出已经完成。当前导出格式版本为 3，图谱输入仍为 schemaVersion 1。旧图谱可继续导出，旧版图谱的 snapshot.dirty 仍会写入导出清单。
+输入最多 8 MiB。导出按输入内容和导出格式计算 SHA-256，在输出根下建立 threadlight-<摘要前缀>。threadlight-export.json 最后写入，表示本次导出已经完成。当前导出格式版本为 4，图谱输入仍为 schemaVersion 1。旧图谱可继续导出，旧版图谱的 snapshot.dirty 仍会写入导出清单。
 
 相同输入复用先前的快照。中断后可补齐一致的文件，遇冲突时报告路径。图谱发生变化时产出独立快照，为跨版本比对和保留手工笔记提供基础。
 

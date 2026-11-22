@@ -114,12 +114,17 @@
     .step-role::before { content: ""; width: 8px; height: 8px; border: 1px solid currentColor; border-radius: 50%; }
     .step-role.entry::before { background: currentColor; }
     .step-role.branch::before { border-radius: 1px; rotate: 45deg; }
+    .step .step-state, .detail .step-state { display: inline-block; margin: 4px 0; padding: 1px 7px; border: 1px solid var(--line); border-radius: 6px; font-size: .75rem; font-weight: 630; color: var(--quiet); }
+    .step .step-state.implemented, .detail .step-state.implemented { color: var(--accent); border-color: currentColor; }
+    .step .step-state.verified, .detail .step-state.verified { color: var(--root-ink); background: var(--root-fill); }
     .detail { border-top: 2px solid var(--accent); padding-top: 10px; overflow-wrap: anywhere; }
     .detail h2 { font-size: 1.12rem; margin-bottom: 5px; }
     .detail h3 { font-size: .88rem; margin: 13px 0 3px; }
     .detail ul { padding-left: 19px; margin: 5px 0 0; font-size: .88rem; }
     .detail li + li { margin-top: 5px; }
     .detail code { font-size: .79rem; color: var(--quiet); user-select: all; }
+    .detail time { display: block; color: var(--quiet); font-size: .79rem; }
+    .detail .divergence { white-space: pre-wrap; }
     .refs summary { cursor: pointer; }
     .evidence-preview { max-height: 13rem; overflow: auto; padding: 8px; margin: 5px 0; border: 1px solid var(--line); white-space: pre-wrap; font-size: .76rem; }
     .relation { padding: 4px 0; color: var(--accent); font-size: .89rem; }
@@ -285,6 +290,28 @@
       result.type = 'button'
       result.addEventListener('click', fn)
       return result
+    }
+
+    function stepBadge(node) {
+      const state = node.state ?? (node.sources.length ? 'implemented' : 'planned')
+      return make('span', data.stepStateLabels[state], 'step-state ' + state)
+    }
+
+    function renderVerification(node) {
+      if (node.verification?.length) {
+        const list = make('ul')
+        for (const { result, summary, command, at } of node.verification) {
+          const row = make('li')
+          row.append(make('strong', data.verificationLabels[result]), ' · ' + summary)
+          if (command) row.append(document.createElement('br'), make('code', command))
+          const time = make('time', at)
+          time.dateTime = at
+          row.append(time)
+          list.append(row)
+        }
+        detail.append(make('h3', '验证记录'), list)
+      }
+      if (node.divergence) detail.append(make('h3', '与预期的差异'), make('p', node.divergence, 'divergence'))
     }
 
     function positionTooltip() {
@@ -653,7 +680,8 @@
       hideTooltip()
       for (const [key, card] of cards) card.setAttribute('aria-pressed', key === id)
       renderGuide()
-      detail.replaceChildren(reviewText('h2', node.title, id), reviewText('p', node.summary, id))
+      detail.replaceChildren(reviewText('h2', node.title, id), stepBadge(node), reviewText('p', node.summary, id))
+      renderVerification(node)
       if (node.details.length) {
         const list = make('ul')
         list.append(...node.details.map(value => reviewText('li', value, id)))
@@ -753,7 +781,7 @@
           if (conditions.length === 1) card.append(make('span', conditions[0].label, 'condition'))
           const title = make('strong', node.title), summary = make('span', node.summary)
           if (data.review) title.dataset.reviewText = summary.dataset.reviewText = id
-          card.append(title, summary)
+          card.append(title, summary, stepBadge(node))
           cards.set(id, card)
           lane.append(card)
         }

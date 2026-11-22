@@ -29,7 +29,7 @@ test('export writes real note and Canvas references and reuses a manually edited
   assert.equal(first.reused, false)
   const snapshot = join(folder, first.directory)
   const manifest = JSON.parse(await readFile(join(snapshot, 'threadlight-export.json'), 'utf8'))
-  assert.equal(manifest.exportFormatVersion, 3)
+  assert.equal(manifest.exportFormatVersion, 4)
   const base = '线路/导出项目图谱/在 Obsidian 打开图谱'
   const canvas = JSON.parse(await readFile(join(snapshot, base + '.canvas'), 'utf8'))
   const markdown = await readFile(join(snapshot, base + '.md'), 'utf8')
@@ -42,6 +42,7 @@ test('export writes real note and Canvas references and reuses a manually edited
   assert.ok(!markdown.includes('#^step-'))
   assert.match(markdown, /threadlight_id: "flow\/export\/obsidian"/)
   assert.match(markdown, /\*\*从这里开始\*\* 读取并验证图谱/)
+  assert.match(markdown, /^状态：有实现依据$/m)
   assert.match(markdown, /\*\*字段或引用无效\*\* → 指出需要修正的位置/)
   assert.match(markdown, /^> \[!info\]- 实现与证据/m)
   assert.equal(canvas.edges[0].fromNode, 'validate')

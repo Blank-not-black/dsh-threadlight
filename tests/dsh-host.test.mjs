@@ -289,6 +289,8 @@ test('installed DSH serves the reviewer, exports notes and accepts a flow draft 
   assert.deepEqual(observed.ids, [submission.sessionId])
   assert.equal(observed.prompts.length, 1)
   const details = JSON.stringify(observed.prompts[0])
+  assert.ok(details.includes(JSON.stringify(join(emptyWorkspace, '.threadlight', 'implementation', id, '3.json')).slice(1, -1)))
+  assert.match(details, /只记录真正执行过的验证/)
   assert.match(details, /上传期间断网/)
   assert.match(details, /保留已选文件和预览内容。/)
   assert.doesNotMatch(details, /未选中的备忘/)
