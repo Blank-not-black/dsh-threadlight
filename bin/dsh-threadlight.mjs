@@ -100,7 +100,8 @@ async function run() {
   const graph = parseGraph(await readTextFile(input, MAX_GRAPH_BYTES))
   if (validateOnly) {
     const flows = graph.groups.flatMap(group => group.flows)
-    console.log(JSON.stringify({ groups: graph.groups.length, flows: flows.length, nodes: flows.reduce((n, flow) => n + flow.nodes.length, 0) }))
+    console.log(JSON.stringify({ groups: graph.groups.length, flows: flows.length,
+      nodes: flows.reduce((n, flow) => n + flow.nodes.length, 0), areas: graph.project.areas?.length ?? 0 }))
     return
   }
   const store = await createLocalStore(output)

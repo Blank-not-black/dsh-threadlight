@@ -35,7 +35,10 @@ test('installed DSH serves the reviewer, exports notes and accepts a flow draft 
   await mkdir(unavailableWorkspace)
   await mkdir(join(unreadableGraph, '.threadlight'), { recursive: true })
   await writeFile(join(unreadableGraph, '.threadlight/graph.json'), '{', 'utf8')
-  const example = await readFile(new URL('../examples/basic.graph.json', import.meta.url), 'utf8')
+  const exampleGraph = JSON.parse(await readFile(new URL('../examples/basic.graph.json', import.meta.url), 'utf8'))
+  exampleGraph.project.areas = [{ id: 'delivery', title: '交付' }]
+  exampleGraph.groups[0].area = 'delivery'
+  const example = JSON.stringify(exampleGraph)
   await writeFile(join(workspace, '.threadlight/graph.json'), example, 'utf8')
   await writeFile(probePath, [
     "import { rename, writeFile } from 'node:fs/promises'",
@@ -119,6 +122,9 @@ test('installed DSH serves the reviewer, exports notes and accepts a flow draft 
   const canvas = JSON.parse(await readFile(join(workspace, result.first.overview), 'utf8'))
   assert.equal(canvas.nodes[0].file, '项目总览.md')
   assert.equal(canvas.edges[0].toEnd, 'arrow')
+  assert.deepEqual(canvas.edges.map(({ fromNode, toNode }) => [fromNode, toNode]), [
+    ['project', 'area-delivery'], ['area-delivery', 'module-export'],
+  ])
 
   const page = new URL('threadlight/?workspace=' + result.ws, result.base)
   assert.equal((await fetch(page)).status, 401)
@@ -133,6 +139,8 @@ test('installed DSH serves the reviewer, exports notes and accepts a flow draft 
   const html = await response.text()
   const data = JSON.parse(html.match(/id="data">(.*?)<\/script>/s)[1])
   assert.equal(data.review.workspace, result.ws)
+  assert.deepEqual(data.project.areas, exampleGraph.project.areas)
+  assert.match(html, /id="overview-tree" role="tree"/)
   const nonce = html.match(/<script nonce="([^"]+)">/)[1]
   assert.ok(response.headers.get('content-security-policy').includes("'nonce-" + nonce + "'"))
   const group = data.groups[0]
@@ -143,6 +151,7 @@ test('installed DSH serves the reviewer, exports notes and accepts a flow draft 
   const projectDoc = await fetch(documentPage, { headers: { cookie } })
   assert.equal(projectDoc.status, 200)
   const renderedDoc = await projectDoc.text()
+  assert.match(renderedDoc, /交付 → 导出项目图谱/)
   assert.ok(renderedDoc.includes('id="' + flow.id + '--' + flow.nodes[0].id + '"'))
   assert.ok(renderedDoc.includes('#step/' + group.id + '/' + flow.id + '/' + flow.nodes[0].id))
   const selection = { ...data.review, group: group.id, flow: flow.id, step: null, text: '节点编号' }

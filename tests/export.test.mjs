@@ -29,7 +29,7 @@ test('export writes real note and Canvas references and reuses a manually edited
   assert.equal(first.reused, false)
   const snapshot = join(folder, first.directory)
   const manifest = JSON.parse(await readFile(join(snapshot, 'threadlight-export.json'), 'utf8'))
-  assert.equal(manifest.exportFormatVersion, 4)
+  assert.equal(manifest.exportFormatVersion, 5)
   const base = '线路/导出项目图谱/在 Obsidian 打开图谱'
   const canvas = JSON.parse(await readFile(join(snapshot, base + '.canvas'), 'utf8'))
   const markdown = await readFile(join(snapshot, base + '.md'), 'utf8')
@@ -130,4 +130,77 @@ test('cross-flow links render only in the authored direction and note paths are 
   assert.equal(retry.toNode, 'validate')
   assert.equal(retry.fromSide, 'left')
   assert.equal(retry.label, '修正后重试')
+})
+
+test('graph validates optional areas and global group identity', () => {
+  const graph = JSON.parse(raw)
+  const parse = () => parseGraph(JSON.stringify(graph))
+  assert.deepEqual(parse(), graph)
+  graph.groups[0].area = 'delivery'
+  assert.throws(parse, /^Error: Invalid graph: .*\.area is not allowed/)
+  graph.project.areas = []
+  assert.throws(parse, /\.area is not allowed/)
+  delete graph.groups[0].area
+  assert.deepEqual(parse(), graph)
+
+  graph.project.areas = [{ id: 'delivery', title: '交付' }]
+  assert.throws(parse, /\.area must be a string/)
+  graph.groups[0].area = 'unknown'
+  assert.throws(parse, /references an unknown area/)
+  graph.groups[0].area = 'delivery'
+  const area = graph.project.areas[0]
+  graph.project.areas.push({ ...area })
+  assert.throws(parse, /project\.areas\[1\]\.id is duplicated/)
+  graph.project.areas.pop()
+  for (const [field, value, error] of [
+    ['id', 'x'.repeat(65), /lowercase slug/],
+    ['id', 'Uppercase', /lowercase slug/],
+    ['title', 'x'.repeat(161), /at most 160/],
+    ['title', 'first\nsecond', /must be on one line/],
+    ['summary', 'x'.repeat(6001), /at most 6000/],
+  ]) {
+    const old = area[field]
+    area[field] = value
+    assert.throws(parse, error)
+    area[field] = old
+  }
+  assert.equal(parse().groups[0].area, 'delivery')
+  graph.project.areas.push({ id: 'other', title: '其他' })
+  graph.groups.push({ ...graph.groups[0], area: 'other' })
+  assert.throws(parse, /groups\[1\]\.id is duplicated/)
+  graph.project.areas = Array.from({ length: 33 }, (_, i) => ({ id: 'area-' + i, title: '领域 ' + i }))
+  assert.throws(parse, /project\.areas must have between 0 and 32 items/)
+})
+
+test('Obsidian overview lists areas in order and connects each group to its area', async () => {
+  const graph = JSON.parse(raw)
+  const group = graph.groups[0]
+  graph.project.areas = [
+    { id: 'read', title: '阅读' },
+    { id: 'delivery', title: '交付', summary: '导出项目资料。' },
+    { id: 'future', title: '扩展' },
+  ]
+  group.area = 'delivery'
+  graph.groups.push({ ...group, id: 'intro', title: '项目介绍', area: 'read' },
+    { ...group, id: 'share', title: '分享快照' })
+  const written = new Map()
+  const result = await exportObsidian(parseGraph(JSON.stringify(graph)), {
+    async read() { return null },
+    async create(path, content) { written.set(path, content); return true },
+  }, { output: '' })
+  const project = written.get(result.directory + '/项目总览.md')
+  assert.match(project, /## 阅读\n\n- \[\[功能区\/项目介绍\|项目介绍\]\].*\n\n## 交付\n\n导出项目资料。\n\n- \[\[功能区\/导出项目图谱\|导出项目图谱\]\].*\n- \[\[功能区\/分享快照\|分享快照\]\]/)
+  assert.match(project, /## 扩展/)
+  const canvas = JSON.parse(written.get(result.overview))
+  assert.deepEqual(canvas.edges.map(({ fromNode, toNode }) => [fromNode, toNode]), [
+    ['project', 'area-read'], ['area-read', 'module-intro'],
+    ['project', 'area-delivery'], ['area-delivery', 'module-export'], ['area-delivery', 'module-share'],
+    ['project', 'area-future'],
+  ])
+  const ids = new Set(canvas.nodes.map(({ id }) => id))
+  for (const { fromNode, toNode } of canvas.edges) assert.ok(ids.has(fromNode) && ids.has(toNode))
+  for (const { type, file } of canvas.nodes) {
+    if (type === 'file') assert.ok(written.has(result.directory + '/' + file))
+  }
+  assert.equal(JSON.parse(written.get(result.directory + '/threadlight-export.json')).exportFormatVersion, 5)
 })

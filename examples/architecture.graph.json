@@ -1,9 +1,16 @@
 {
   "schemaVersion": 1,
-  "project": { "name": "Threadlight" },
+  "project": {
+    "name": "Threadlight",
+    "areas": [
+      { "id": "generation", "title": "图谱生成", "summary": "从 Git 工作树生成并校验文档图谱。" },
+      { "id": "publishing", "title": "阅读与分发", "summary": "打开查看器或导出给 Obsidian。" }
+    ]
+  },
   "groups": [
     {
       "id": "documentation",
+      "area": "generation",
       "title": "文档生成",
       "summary": "根据 Git 工作树的实际变动生成或更新项目文档。",
       "flows": [
@@ -29,7 +36,7 @@
               "details": [],
               "sources": [
                 { "path": "lib/document-session.mjs", "kind": "source" },
-                { "path": "docs/graph-format.md", "kind": "documentation", "line": 23 }
+                { "path": "docs/graph-format.md", "kind": "documentation", "line": 32 }
               ]
             },
             {
@@ -47,7 +54,7 @@
               "sources": [
                 { "path": "lib/refresh.mjs", "kind": "source", "line": 144 },
                 { "path": "tests/refresh.test.mjs", "kind": "test", "line": 133 },
-                { "path": "docs/graph-format.md", "kind": "documentation", "line": 23 },
+                { "path": "docs/graph-format.md", "kind": "documentation", "line": 32 },
                 { "path": "README.md", "kind": "documentation", "line": 55 }
               ]
             }
@@ -66,6 +73,7 @@
     },
     {
       "id": "graph",
+      "area": "generation",
       "title": "图谱校验",
       "summary": "在写出文档前检查图谱结构及其内部引用。",
       "flows": [
@@ -91,6 +99,7 @@
     },
     {
       "id": "delivery",
+      "area": "publishing",
       "title": "阅读与导出",
       "summary": "在 HTML 中查看流程，或把图谱放进 Obsidian。",
       "flows": [

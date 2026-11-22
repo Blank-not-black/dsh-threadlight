@@ -16,7 +16,6 @@
       --highlight: light-dark(#e4efe7,#283b33);
       --wire: light-dark(#88988e,#82978a);
       --dependency: light-dark(#5c4c84,#c5b2f0);
-      --map-dot: light-dark(#cfdbd1,#37463d);
       --root-fill: light-dark(#193e32,#b0dfc3);
       --root-ink: light-dark(#f8fff9,#173527);
       background: var(--paper);
@@ -48,35 +47,34 @@
     .overview-heading { display: flex; align-items: baseline; flex-wrap: wrap; gap: 5px 14px; margin-bottom: 16px; }
     .overview-heading h2, .diagram h2, .relations h2 { font-size: clamp(1.35rem,3vw,1.8rem); line-height: 1.28; overflow-wrap: anywhere; }
     .overview-heading p { font-size: .9rem; }
-    .overview-layout { display: grid; grid-template-columns: minmax(0,1fr) minmax(265px,340px); align-items: start; gap: 18px; }
-    .map-board { position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0,1fr) minmax(110px,.8fr) minmax(0,1fr); align-items: center; gap: clamp(20px,3vw,46px); padding: clamp(18px,3vw,38px); min-height: 380px; border: 1px solid var(--line); border-radius: 13px; background: radial-gradient(var(--map-dot) 1px, transparent 1px) 0 0 / 17px 17px, var(--panel); }
-    .map-board.single { grid-template-columns: minmax(0,.8fr) minmax(0,1fr); }
-    .map-column { position: relative; display: grid; gap: 14px; min-width: 0; }
-    .map-column:empty { display: none; }
-    .map-wires { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; color: var(--wire); }
-    .map-project, .map-area { position: relative; border-radius: 9px; text-align: left; overflow-wrap: anywhere; }
-    .map-project { color: var(--root-ink); background: var(--root-fill); padding: 16px 13px; line-height: 1.35; }
-    .map-project span { display: block; opacity: .85; font-size: .78rem; margin-bottom: 4px; }
-    .map-project strong { font-size: clamp(.97rem,1.45vw,1.3rem); }
-    .map-area { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; min-height: 65px; padding: 9px 11px; background: var(--panel); border: 1px solid var(--line); transition: border-color .12s, background-color .12s; }
-    .map-area strong, .map-area small, .group-flow small { display: block; }
-    .map-area small, .group-flow small { color: var(--quiet); margin-top: 2px; font-size: .78rem; }
-    .map-area:hover, .map-area[aria-pressed="true"] { border-color: var(--accent); background: var(--highlight); }
-    .map-area[aria-pressed="true"] { box-shadow: inset 3px 0 var(--accent); }
-    .map-area .group-arrow { flex-shrink: 0; }
-    .group-panel { min-width: 0; padding: 15px 16px; border: 1px solid var(--line); background: var(--panel); border-radius: 13px; overflow-wrap: anywhere; }
-    .group-panel h3 { font-size: 1.18rem; }
-    .group-panel p { margin: 4px 0 8px; font-size: .88rem; }
-    .group-flows { list-style: none; margin: 12px 0 0; padding: 0; border-top: 1px solid var(--line); }
-    .group-flows li + li { border-top: 1px solid var(--line); }
-    .group-flow, .relation-entry { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; width: 100%; border: 0; border-radius: 6px; background: transparent; }
-    .group-flow { padding: 9px 7px; min-height: 49px; overflow-wrap: anywhere; }
-    .group-flow:hover, .relation-entry:hover { color: var(--accent); background: var(--highlight); }
-    .group-arrow { color: var(--accent); }
+    .overview-search { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; margin-bottom: 12px; font-size: .88rem; }
+    .overview-search input, .nav input { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--panel); }
+    .overview-search input { width: min(24rem,100%); }
+    .overview-tree { --indent: clamp(12px,2.4vw,24px); list-style: none; margin: 0; padding: clamp(9px,2vw,20px); max-width: 920px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel); }
+    .overview-tree [role="group"] { list-style: none; margin: 3px 0 4px 14px; padding: 0 0 0 var(--indent); border-left: 1px solid var(--line); }
+    .overview-tree [role="treeitem"] { position: relative; }
+    .overview-tree [role="group"] > [role="treeitem"]::before { content: ""; position: absolute; top: 19px; right: 100%; width: var(--indent); border-top: 1px solid var(--line); }
+    .tree-row { display: flex; align-items: baseline; gap: 6px; min-height: 38px; padding: 6px 7px; border-radius: 6px; overflow-wrap: anywhere; }
+    .tree-row small { display: block; color: var(--quiet); white-space: pre-wrap; }
+    .tree-row[data-kind="project"] { color: var(--accent); }
+    .tree-kind { flex: none; font-size: .76rem; color: var(--quiet); }
+    .tree-toggle { flex: 0 0 14px; color: var(--accent); text-align: center; }
+    .tree-toggle::before { content: "•"; }
+    [aria-expanded] > .tree-row .tree-toggle::before { content: "▸"; }
+    [aria-expanded="true"] > .tree-row .tree-toggle::before { content: "▾"; }
+    [aria-expanded] > .tree-row, .tree-row[data-kind="step"] { cursor: pointer; }
+    .tree-row:hover, .overview-tree [role="treeitem"]:focus-visible > .tree-row { background: var(--highlight); }
+    .overview-tree [role="treeitem"]:focus-visible { outline: none; }
+    .overview-tree [role="treeitem"]:focus-visible > .tree-row { outline: 2px solid var(--accent); outline-offset: 1px; }
+    .tree-open { border: 0; border-radius: 3px; padding: 0 2px; color: var(--accent); background: none; text-align: left; overflow-wrap: anywhere; }
+    .tree-open:hover { text-decoration: underline; }
+    .tree-row[data-kind="step"] .tree-label { color: var(--accent); }
+    .relation-entry { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; width: 100%; border: 0; border-radius: 6px; background: transparent; }
+    .relation-entry:hover { color: var(--accent); background: var(--highlight); }
     .scope { display: block; margin-bottom: 5px; color: var(--accent); font-size: .84rem; overflow-wrap: anywhere; }
     .nav > details > summary { display: none; cursor: pointer; font-weight: 630; }
     .nav label { display: block; font-size: .82rem; font-weight: 620; margin-bottom: 5px; }
-    .nav input { width: 100%; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--panel); }
+    .nav input { width: 100%; }
     #flows { margin-top: 13px; }
     #flows details { margin-bottom: 5px; }
     #flows summary { cursor: pointer; padding: 5px 2px; font-weight: 610; }
@@ -155,7 +153,6 @@
     .term-tooltip { position: fixed; z-index: 2; width: min(310px, calc(100vw - 24px)); border: 1px solid var(--line); padding: 11px 13px; border-radius: 9px; background: var(--panel); color: var(--ink); box-shadow: 0 5px 22px #0002; font-size: .9rem; overflow-wrap: anywhere; }
     .term-tooltip strong { display: block; color: var(--accent); margin-bottom: 3px; }
     @media(max-width: 1020px) { .workspace { grid-template-columns: minmax(160px,205px) minmax(0,1fr); } .detail { grid-column: 2; } }
-    @media(max-width: 940px) { .overview-layout { grid-template-columns: minmax(0,1fr); } }
     @media(max-width: 800px) {
       .relations-map { grid-template-columns: 1fr; gap: 14px; }
       .relations-current { grid-row: 1; }
@@ -169,15 +166,9 @@
       .nav > details > summary { display: list-item; }
       .nav label { margin-top: 8px; }
       .graph { padding-inline: 18px; }
-      .map-board, .map-board.single { grid-template-columns: 1fr; min-height: 0; gap: 10px; padding: 12px 13px 12px 29px; }
-      .map-project { grid-row: 1; padding: 10px 12px; }
-      .map-project span { display: inline; margin-right: 7px; }
-      .map-column { gap: 10px; }
-      .map-area { min-height: 50px; padding: 6px 10px; }
-      .map-area small { margin-top: 0; }
+      .overview-tree [role="group"] { margin-left: 6px; }
       .guide-status { width: 100%; margin-left: 0; }
     }
-    @media(prefers-reduced-motion: reduce) { .map-area { transition: none; } }
   </style>
 </head>
 <body>
@@ -195,19 +186,10 @@
   </nav>
   <main class="workspace" id="workspace">
     <section id="overview-panel" aria-labelledby="overview-title" hidden>
-      <div class="overview-heading"><h2 id="overview-title">功能地图</h2><p id="overview-count" class="muted"></p></div>
-      <div class="overview-layout">
-        <div class="map-board" id="map-board" role="group" aria-label="项目与功能区">
-          <canvas class="map-wires" id="map-wires" aria-hidden="true"></canvas>
-          <div class="map-column" id="map-left"></div>
-          <div class="map-project" id="map-project"><span>项目</span><strong></strong></div>
-          <div class="map-column" id="map-right"></div>
-        </div>
-        <section class="group-panel" id="group-panel" aria-labelledby="group-title">
-          <h3 id="group-title" tabindex="-1"></h3><p class="muted" id="group-summary"></p>
-          <ul class="group-flows" id="group-flows"></ul>
-        </section>
-      </div>
+      <div class="overview-heading"><h2 id="overview-title">项目功能</h2><p id="overview-count" class="muted"></p></div>
+      <div class="overview-search"><label for="overview-search">筛选功能树</label><input type="search" id="overview-search"></div>
+      <ul class="overview-tree" id="overview-tree" role="tree" aria-labelledby="overview-title"></ul>
+      <p class="muted" id="overview-empty" role="status" hidden>找不到匹配的分支或步骤</p>
     </section>
     <nav class="nav" id="navigation" aria-label="功能线路" hidden>
       <details id="navigator" open><summary>切换线路</summary><label for="search">查找功能线路</label><input type="search" id="search"><div id="flows"></div></details>
@@ -241,9 +223,11 @@
     const groups = data.groups.map(group => ({
       group, items: group.flows.map(flow => ({ group, flow, key: group.id + '/' + flow.id })),
     }))
-    const groupById = new Map(groups.map(entry => [entry.group.id, entry]))
-    const groupChoices = new Map()
-    const mapBoard = by('map-board'), mapCanvas = by('map-wires'), mapRoot = by('map-project')
+    const areas = data.project.areas ?? []
+    const tree = by('overview-tree')
+    const treeLabels = { project: '项目', area: '领域', group: '功能区', flow: '线路', step: '步骤' }
+    const expanded = new Set(['project'])
+    let overviewRoot, treeFocus
     const items = groups.flatMap(group => group.items)
     const itemByKey = new Map(items.map(item => [item.key, item]))
     const connections = new Map(items.map(item => [item.key, { incoming: [], outgoing: [] }]))
@@ -261,7 +245,6 @@
     const selectedByFlow = new Map()
     const viewButtons = document.querySelectorAll('.view-button')
     const narrow = matchMedia('(max-width: 650px)')
-    const stackedOverview = matchMedia('(max-width: 940px)')
     const beginner = by('beginner'), tooltip = by('term-tooltip')
     const glossary = new Map(data.glossary.map(entry => [entry.term.toLowerCase(), entry.definition]))
     const patterns = [...glossary.keys()].sort((a, b) => b.length - a.length).map(term => {
@@ -388,52 +371,134 @@
       return withTerms(element, text)
     }
 
-    function renderOverview() {
-      by('overview-count').textContent = groups.length + ' 个功能区 · ' + items.length + ' 条线路'
-      mapRoot.querySelector('strong').textContent = data.project.name
-      mapBoard.classList.toggle('single', groups.length === 1)
-      const split = groups.length === 1 ? 0 : Math.ceil(groups.length / 2)
-      groups.forEach((entry, index) => {
-        const { group, items } = entry
-        const choice = button('', 'map-area', () => {
-          if (current.group !== group) current = items[0]
-          showGroup(entry, stackedOverview.matches)
-        })
-        const label = make('span')
-        label.append(make('strong', group.title), make('small', items.length + ' 条线路'))
-        const arrow = make('span', '›', 'group-arrow')
-        arrow.setAttribute('aria-hidden', 'true')
-        choice.append(label, arrow)
-        choice.dataset.reviewGroup = group.id
-        choice.setAttribute('aria-controls', 'group-panel')
-        groupChoices.set(group.id, choice)
-        by(index < split ? 'map-left' : 'map-right').append(choice)
-      })
+    function overviewEntries() {
+      const modules = groups.map(({ group, items }) => ({
+        kind: 'group', key: 'group/' + group.id, title: group.title, summary: group.summary, group,
+        children: items.map(item => ({
+          kind: 'flow', key: 'flow/' + item.key, title: item.flow.title, summary: item.flow.summary, item,
+          children: item.flow.nodes.map(node => ({
+            kind: 'step', title: node.title, summary: node.summary, item, step: node.id,
+          })),
+        })),
+      }))
+      const children = areas.length ? areas.map(area => ({
+        kind: 'area', key: 'area/' + area.id, title: area.title, summary: area.summary,
+        children: modules.filter(entry => entry.group.area === area.id),
+      })) : modules
+      return { kind: 'project', key: 'project', title: data.project.name, children }
     }
 
-    function showGroup({ group, items }, focus = false) {
-      const title = by('group-title')
-      title.textContent = group.title
-      title.dataset.reviewGroup = group.id
-      const summary = by('group-summary')
-      summary.textContent = group.summary ?? ''
-      summary.hidden = !group.summary
-      for (const [id, choice] of groupChoices) choice.setAttribute('aria-pressed', id === group.id)
-      by('group-flows').replaceChildren(...items.map(item => {
-        const row = make('li')
-        const link = button('', 'group-flow', () => activate('process', item, true))
-        const label = make('span')
-        const branches = item.flow.edges.filter(edge => edge.kind === 'branch').length
-        const meta = item.flow.nodes.length + ' 步' + (branches ? ' · ' + branches + ' 个分支' : '')
-        label.append(make('strong', item.flow.title), make('small', meta))
-        const arrow = make('span', '→', 'group-arrow')
+    function filterOverview(entry, term) {
+      const children = entry.children?.map(child => filterOverview(child, term)).filter(Boolean)
+      if (children?.length) return { ...entry, children, searchExpanded: true }
+      return (entry.title + ' ' + (entry.summary ?? '')).toLowerCase().includes(term) ? entry : null
+    }
+
+    function setTreeFocus(element) {
+      if (treeFocus) {
+        treeFocus.tabIndex = -1
+        const action = treeFocus.firstElementChild.querySelector('.tree-open')
+        if (action) action.tabIndex = -1
+      }
+      treeFocus = element
+      element.tabIndex = 0
+      const action = element.firstElementChild.querySelector('.tree-open')
+      if (action) action.tabIndex = 0
+    }
+
+    function overviewItem(entry, filtering) {
+      const element = make('li')
+      const kind = treeLabels[entry.kind]
+      element.setAttribute('role', 'treeitem')
+      element.setAttribute('aria-label', entry.title + '，' + kind)
+      element.tabIndex = -1
+      const row = make('div', '', 'tree-row')
+      row.dataset.kind = entry.kind
+      const toggle = make('span', '', 'tree-toggle')
+      toggle.setAttribute('aria-hidden', 'true')
+      const label = make('span', '', 'tree-label')
+      row.append(toggle, make('span', kind, 'tree-kind'), label)
+      element.append(row)
+      if (entry.group) row.dataset.reviewGroup = entry.group.id
+      if (entry.kind === 'flow') {
+        const action = button(entry.title, 'tree-open', () => activate('process', entry.item, true))
+        action.setAttribute('aria-label', '打开操作流程：' + entry.title)
+        action.title = '打开操作流程'
+        action.tabIndex = -1
+        const arrow = make('span', ' →')
         arrow.setAttribute('aria-hidden', 'true')
-        link.append(label, arrow)
-        row.append(link)
-        return row
-      }))
-      drawMap()
-      if (focus) title.focus()
+        action.append(arrow)
+        label.append(action)
+        element.dataset.overviewFlow = entry.item.key
+      } else {
+        const title = make(entry.step ? 'span' : 'strong', entry.title)
+        if (data.review && entry.step) title.dataset.reviewText = entry.step
+        label.append(title)
+      }
+      if (entry.summary && (entry.kind === 'area' || entry.kind === 'group')) label.append(make('small', entry.summary))
+
+      const branch = entry.children?.length ? make('ul') : null
+      function expand(open) {
+        element.setAttribute('aria-expanded', open)
+        branch.hidden = !open
+        branch.replaceChildren(...(open ? entry.children.map(child => overviewItem(child, filtering)) : []))
+        if (!filtering) {
+          if (open) expanded.add(entry.key)
+          else expanded.delete(entry.key)
+        }
+      }
+      if (branch) {
+        branch.setAttribute('role', 'group')
+        element.append(branch)
+        expand(filtering ? Boolean(entry.searchExpanded) : expanded.has(entry.key))
+      }
+      function choose() {
+        if (branch) expand(branch.hidden)
+        else if (entry.step) activate('process', entry.item, true, true, entry.step)
+      }
+      row.addEventListener('click', event => {
+        if (event.target.closest('.tree-open')) return
+        const selection = window.getSelection()
+        if (entry.step && selection?.toString() && row.contains(selection.anchorNode)) return
+        element.focus()
+        choose()
+      })
+      element.addEventListener('keydown', event => {
+        if (event.target !== element) return
+        const key = event.key
+        if (key === 'Enter' || key === ' ') choose()
+        else if (key === 'ArrowRight') {
+          if (branch?.hidden) expand(true)
+          else branch?.firstElementChild?.focus()
+        } else if (key === 'ArrowLeft') {
+          if (branch && !branch.hidden) expand(false)
+          else element.parentElement.closest('[role="treeitem"]')?.focus()
+        } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(key)) {
+          const visible = [...tree.querySelectorAll('[role="treeitem"]')]
+          const index = visible.indexOf(element)
+          const next = { ArrowDown: index + 1, ArrowUp: index - 1, Home: 0, End: visible.length - 1 }[key]
+          visible[next]?.focus()
+        } else return
+        event.preventDefault()
+      })
+      return element
+    }
+
+    function renderOverview() {
+      overviewRoot ??= overviewEntries()
+      const term = by('overview-search').value.trim().toLowerCase()
+      const root = term ? filterOverview(overviewRoot, term) : overviewRoot
+      by('overview-count').textContent = (areas.length ? areas.length + ' 个领域 · ' : '') +
+        groups.length + ' 个功能区 · ' + items.length + ' 条线路'
+      by('overview-empty').hidden = Boolean(root)
+      tree.hidden = !root
+      tree.replaceChildren()
+      treeFocus = null
+      if (root) {
+        const element = overviewItem(root, Boolean(term))
+        tree.append(element)
+        setTreeFocus(element)
+      }
     }
 
     function canvasLayer(canvas) {
@@ -447,42 +512,6 @@
       pen.scale(scale, scale)
       pen.lineJoin = 'round'
       return { box, pen }
-    }
-
-    function drawMap() {
-      if (mode !== 'overview') return
-      const layer = canvasLayer(mapCanvas)
-      if (!layer) return
-      const { box, pen } = layer
-      const root = mapRoot.getBoundingClientRect()
-      const rootY = (root.top + root.bottom) / 2 - box.top
-      const baseColor = getComputedStyle(mapCanvas).color
-      const active = groupChoices.get(current.group.id)
-      const options = [...groupChoices.values()].filter(choice => choice !== active)
-      options.push(active)
-      for (const choice of options) {
-        const area = choice.getBoundingClientRect()
-        const y = (area.top + area.bottom) / 2 - box.top
-        pen.beginPath()
-        pen.strokeStyle = choice === active ? getComputedStyle(choice).borderLeftColor : baseColor
-        pen.lineWidth = choice === active ? 2.6 : 1.3
-        if (narrow.matches) {
-          pen.moveTo(root.left - box.left, rootY)
-          pen.lineTo(15, rootY)
-          pen.lineTo(15, y)
-          pen.lineTo(area.left - box.left, y)
-        } else {
-          const left = area.right <= root.left
-          const start = (left ? root.left : root.right) - box.left
-          const end = (left ? area.right : area.left) - box.left
-          const bend = (start + end) / 2
-          pen.moveTo(start, rootY)
-          pen.lineTo(bend, rootY)
-          pen.lineTo(bend, y)
-          pen.lineTo(end, y)
-        }
-        pen.stroke()
-      }
     }
 
     function navigation() {
@@ -791,10 +820,11 @@
       showStep(selectedByFlow.get(current.key) ?? entry ?? flow.layout.rows[0][0])
     }
 
-    function activate(view, item, focusHeading = false, writeHistory = true) {
+    function activate(view, item, focusHeading = false, writeHistory = true, step) {
       mode = view
       current = item
-      if (guide && guide.key !== current.key) guide = null
+      if (step) selectedByFlow.set(item.key, step)
+      if (guide && (step || guide.key !== current.key)) guide = null
       hideTooltip()
       by('workspace').dataset.view = document.body.dataset.view = mode
       by('overview-panel').hidden = mode !== 'overview'
@@ -805,12 +835,12 @@
         if (control.dataset.view === mode) control.setAttribute('aria-current', 'page')
         else control.removeAttribute('aria-current')
       }
-      if (mode === 'overview') showGroup(groupById.get(current.group.id))
-      else navigation()
+      if (mode !== 'overview') navigation()
       if (mode === 'process') renderProcess()
       if (mode === 'relations') renderRelations()
       if (mode !== 'overview' && narrow.matches) by('navigator').open = false
-      const hash = mode === 'overview' ? 'overview' : (mode === 'relations' ? 'relations/' : '') + item.key
+      const hash = step ? 'step/' + item.key + '/' + step
+        : mode === 'overview' ? 'overview' : (mode === 'relations' ? 'relations/' : '') + item.key
       if (writeHistory && location.hash !== '#' + hash) history.pushState(null, '', '#' + hash)
       if (focusHeading) {
         const heading = by(mode === 'process' ? 'title' : 'relations-title')
@@ -833,6 +863,11 @@
     }
 
     renderOverview()
+    by('overview-search').addEventListener('input', renderOverview)
+    tree.addEventListener('focusin', event => {
+      const element = event.target.closest('[role="treeitem"]')
+      if (element) setTreeFocus(element)
+    })
     for (const control of viewButtons) {
       control.addEventListener('click', () => activate(control.dataset.view, current))
     }
@@ -869,13 +904,12 @@
     window.addEventListener('scroll', positionTooltip)
     restoreView()
     new ResizeObserver(draw).observe(graph)
-    new ResizeObserver(drawMap).observe(mapBoard)
     new ResizeObserver(drawRelations).observe(by('relations-content'))
-    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-      drawMap()
-      drawRelations()
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', drawRelations)
+    if (data.review) window.ThreadlightReview.mount(data, scope => {
+      const overviewKey = scope?.closest('[data-overview-flow]')?.dataset.overviewFlow
+      return itemByKey.get(overviewKey) ?? current
     })
-    if (data.review) window.ThreadlightReview.mount(data, () => current)
   </script>
 </body>
 </html>

@@ -4,21 +4,28 @@
 
 | 层级 | 字段 |
 | --- | --- |
-| 项目 | schemaVersion 为 1，project.name，groups，可选 glossary |
+| 项目 | schemaVersion 为 1，project.name，顶层 groups，可选 project.areas 和 glossary |
+| 领域 | project.areas 中的对象，含 id、title 和可选的 summary |
 | 源码快照 | refresh 写入可选 snapshot，含 scope（working-tree）、id（快照 SHA-256）、baseCommit（Git HEAD，无提交时为 null） |
 | 术语 | glossary 为对象数组。term 是正文中的词，最长 64 字符。definition 是单行解释，最长 360 字符 |
-| 功能区 | id、title、flows，可选 summary |
+| 功能区 | id、title、flows，可选 summary。声明了领域时必须填写 group.area |
 | 线路 | id、title、summary、nodes、edges，可选 layout.rows 和 links |
 | 实现节点 | id、title、summary、details、sources。宿主可写入 state、verification 和 divergence |
 | 证据 | path、kind，可选正整数 line。kind 可取 source、test、documentation、workflow。宿主可写入 anchor、status、preview 和 symbol |
 | 步骤连线 | from、to、kind。kind 可取 sequence、branch、merge。可选 label 表述走这条边的条件 |
 | 跨线路链接 | group、flow、kind。目标为另一条已定义线路，kind 可取 uses、continues |
 
-ID 在各自父级中唯一，使用小写字母、数字和连字符。引用节点的完整身份为 group/flow/node。源码路径用仓库相对路径和正斜杠，行号只是当前快照中的定位依据。保留稳定的语义 ID 可支持后续跨版本批注。没有源码或测试依据时，可以留空 sources 并在 details 中说明待核实的问题。
+ID 使用小写字母、数字和连字符。领域 ID 在项目内唯一，功能区 ID 在整个项目中全局唯一，线路和步骤 ID 在各自父级中唯一。引用节点的完整身份为 group/flow/node。源码路径用仓库相对路径和正斜杠，行号只是当前快照中的定位依据。保留稳定的语义 ID 可支持后续跨版本批注。没有源码或测试依据时，可以留空 sources 并在 details 中说明待核实的问题。
 
 节点的 summary 写一两句话，说明这一环节发生什么以及用户看到什么。details 记录输入、状态变化、失败后的动作和证据。refresh 提交的新线路和修订线路中，每条 branch 边都要用 label 写明触发条件，例如「摘要不符」「主机可达」。既有图谱仍可读取。重试边明确指回相应步骤。layout.rows 中每个节点出现一次，外层每项为画布的一列。省略布局时按连线排出先后与并行分支，环内节点以输入顺序安置。
 
 项目术语最多 200 条，按不区分大小写的术语名去重。查看器优先显示项目解释，并为常见术语提供内置解释。增量文档补丁里的 glossary 只需包含新增或修订的定义。
+
+## 项目层级
+
+有领域的图谱按「项目 → 领域 → 功能区 → 线路 → 步骤」展示。project.areas 是最多 32 项的数组。每个领域的 id 是最长 64 字符的小写 slug，title 是最长 160 字符的非空单行文本，summary 是最长 6000 字符的可选文本。功能区仍保存在顶层 groups。声明领域后，每个功能区的 area 必须是某个已声明领域的 ID。领域按 project.areas 的顺序展示，同一领域内的功能区按 groups 的顺序展示。省略 project.areas 或使用空数组时，图谱按「项目 → 功能区 → 线路 → 步骤」展示，所有功能区必须省略 area。跨线路链接、步骤锚点和批注继续使用原有标识。
+
+文档会话可以在 update.json 的顶层填写可选的 areas，结构与 project.areas 相同。合并时，同 ID 的定义在原位置整项替换，新 ID 按补丁顺序追加，未提及的领域会保留。功能区补丁可填写 area 调整归属，省略时沿用已有归属。第一次给旧图谱加领域时，需要给所有保留的功能区填写归属。合并结果仍须满足领域数量和引用约束，任何校验失败都会使整次更新失败。领域定义只支持新增和替换。
 
 ## 增量审阅
 
@@ -94,7 +101,7 @@ generatedAt 使用与验证记录相同的时间格式。summary 为可选文本
 | 这一步依据哪段代码 | 展开该步骤的「实现与证据」，查看实现、测试和原始位置 |
 | 想直观看分支或重试 | 打开线路 Canvas，卡片显示标题和短摘要，可跳到笔记中对应步骤 |
 
-**笔记图谱**采用「项目总览 → 功能区 → 线路」的方向。读者用 Obsidian 的反向链接找上层。跨线路关系来自显式 links。uses 从使用方指向所使用的线路，continues 从当前线路指向下一条线路。共享源码位置只作为证据，作者需要据实际调用或流程确定跨线路关系。
+**笔记图谱**采用「项目总览 → 功能区 → 线路」的链接方向。声明领域时，项目总览按领域分节列出功能区，总览 Canvas 在项目与功能区之间加入领域卡片。读者用 Obsidian 的反向链接找上层。跨线路关系来自显式 links。uses 从使用方指向所使用的线路，continues 从当前线路指向下一条线路。共享源码位置只作为证据，作者需要据实际调用或流程确定跨线路关系。
 
 **线路 Canvas**的箭头按 from 和 to 绘制。并行分支在同一列，重试箭头指回较早的步骤。条件标签来自原始数据。卡片与笔记使用同一个稳定的 step-节点ID 块锚点。
 
@@ -102,7 +109,7 @@ generatedAt 使用与验证记录相同的时间格式。summary 为可选文本
 
 ## 快照
 
-输入最多 8 MiB。导出按输入内容和导出格式计算 SHA-256，在输出根下建立 threadlight-<摘要前缀>。threadlight-export.json 最后写入，表示本次导出已经完成。当前导出格式版本为 4，图谱输入仍为 schemaVersion 1。旧图谱可继续导出，旧版图谱的 snapshot.dirty 仍会写入导出清单。
+输入最多 8 MiB。导出按输入内容和导出格式计算 SHA-256，在输出根下建立 threadlight-<摘要前缀>。threadlight-export.json 最后写入，表示本次导出已经完成。当前导出格式版本为 5，图谱输入仍为 schemaVersion 1。旧图谱可继续导出，旧版图谱的 snapshot.dirty 仍会写入导出清单。
 
 相同输入复用先前的快照。中断后可补齐一致的文件，遇冲突时报告路径。图谱发生变化时产出独立快照，为跨版本比对和保留手工笔记提供基础。
 

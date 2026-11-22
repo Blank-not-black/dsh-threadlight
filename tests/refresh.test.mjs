@@ -331,3 +331,51 @@ test('refresh ties a step to the current source and documentation and publishes 
   assert.equal(moved.sources[1].preview.startLine, 3)
   assert.match(moved.sources[1].preview.text, /# Retry from the failed step/)
 })
+
+test('refresh merges area updates and preserves the last publication on invalid assignments', async t => {
+  const { root, cli } = await fixture(t)
+  async function update(patch) {
+    return refreshDocumentation(root, { runSession: async ({ input }) => ({
+      update: { ...acknowledge(input), ...patch },
+    }) })
+  }
+  const first = await refreshDocumentation(root, { dshCli: cli })
+  assert.equal((await readGraph(root, first.snapshot)).project.areas, undefined)
+  const storage = { id: 'storage', title: '存储', summary: '管理文件。' }
+  const sharing = { id: 'sharing', title: '共享' }
+  const archive = { id: 'archive', title: '归档' }
+  const trigger = join(root, 'src/areas.js')
+
+  await writeFile(trigger, '// introduce areas\n')
+  const grouped = await update({ areas: [storage, sharing], groups: [{ id: 'files', area: 'storage', flows: [] }] })
+  assert.equal(grouped.status, 'updated')
+  assert.deepEqual(grouped.flowChanges, { added: 0, modified: 0, removed: 0 })
+  assert.deepEqual((await readGraph(root, grouped.snapshot)).project.areas, [storage, sharing])
+  assert.match(await readFile(grouped.document, 'utf8'), /## 领域\n\n- <a id="area-storage"><\/a>存储 · 管理文件。\n  - \[Files\]\(docs\/files\.md\)/)
+  assert.match(await readFile(join(grouped.document, '../docs/files.md'), 'utf8'), /\[存储\]\(\.\.\/project\.md#area-storage\) → Files/)
+  assert.match(await readFile(join(grouped.document, '../docs/files.html'), 'utf8'), /存储 → Files/)
+
+  await writeFile(trigger, '// revise areas\n')
+  const renamed = { id: 'storage', title: '文件存储' }
+  const revised = await update({ areas: [archive, renamed], groups: [{ id: 'files', flows: [] }] })
+  assert.equal(revised.status, 'updated')
+  const revisedGraph = await readGraph(root, revised.snapshot)
+  assert.deepEqual(revisedGraph.project.areas, [renamed, sharing, archive])
+  assert.equal(revisedGraph.groups[0].area, 'storage')
+
+  await writeFile(trigger, '// move group\n')
+  const moved = await update({ groups: [{ id: 'files', area: 'archive', flows: [] }] })
+  assert.equal(moved.status, 'updated')
+  assert.equal((await readGraph(root, moved.snapshot)).groups[0].area, 'archive')
+  assert.match(await readFile(moved.document, 'utf8'), /归档\n  - \[Files\]/)
+
+  const state = join(root, '.threadlight/state.json')
+  const published = await readFile(state, 'utf8')
+  const view = await readFile(moved.viewer, 'utf8')
+  await writeFile(trigger, '// invalid assignment\n')
+  await assert.rejects(update({ groups: [{ id: 'files', area: 'unknown', flows: [] }] }), /references an unknown area/)
+  await assert.rejects(update({ areas: Array.from({ length: 30 }, (_, i) => ({ id: 'new-' + i, title: '新领域' })) }),
+    /project\.areas must have between 0 and 32 items/)
+  assert.equal(await readFile(state, 'utf8'), published)
+  assert.equal(await readFile(moved.viewer, 'utf8'), view)
+})

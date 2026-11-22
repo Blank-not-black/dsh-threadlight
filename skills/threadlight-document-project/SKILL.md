@@ -13,6 +13,8 @@ For incremental mode, read .threadlight/previous.json. Review the changed paths 
 
 Write JSON with snapshotId copied verbatim, reviewedPaths listing the exact paths from changes, and groups holding the touched entries. Supply project.name on the first run.
 
+When a project has at least four functional groups or its groups naturally cluster, declare two to five areas in the top-level areas array and assign each group with group.area. An area has a unique lowercase slug id of up to 64 characters, a non-empty single-line title of up to 160 characters, and an optional summary of up to 6000 characters. In incremental mode, include only new or revised area definitions and set group.area on groups whose assignment changes. Keep existing areas. When adding areas for the first time, supply an area for every group, using an empty flows array for groups whose flows stay the same.
+
 Add an optional top-level glossary for technical terms that appear in the reader text and merit an explanation for a non-developer. Use entries with term (the exact phrase in the text) and definition (one or two plain sentences in the project's documentation language, up to 360 characters). Explain what the term does here. For example, `{"term":"断点续传","definition":"上传中断后，从上次确认的位置继续发送文件。"}`. For incremental updates, include only new or revised definitions. Existing entries are kept and matching terms are replaced case-insensitively.
 
 ~~~json
@@ -21,9 +23,11 @@ Add an optional top-level glossary for technical terms that appear in the reader
   "reviewedPaths": [],
   "reviewedFlows": [],
   "project": { "name": "Project" },
+  "areas": [{ "id": "storage", "title": "存储" }],
   "groups": [
     {
       "id": "files",
+      "area": "storage",
       "title": "文件",
       "summary": "用户如何处理项目文件。",
       "flows": [
