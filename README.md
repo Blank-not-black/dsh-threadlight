@@ -97,3 +97,7 @@ node bin/dsh-threadlight.mjs view examples/architecture.graph.json dist/evidence
 - [图谱契约](docs/graph-format.md)
 - [开发表与验收场景](docs/roadmap.md)
 - [开发约定和 skills 位置](AGENTS.md)
+
+## 许可证
+
+[MIT](LICENSE)。随插件打包的 maxGraph 使用 Apache-2.0，其声明见 [scripts/maxgraph-NOTICE.txt](scripts/maxgraph-NOTICE.txt)。
