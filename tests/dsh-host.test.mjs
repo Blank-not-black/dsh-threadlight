@@ -331,6 +331,21 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   const noteEvents = await noteSession.json()
   assert.equal(relative(workspace, noteEvents.cwd), '')
   assert.deepEqual(noteEvents.graphIds, [noteReceipt.sessionId])
+  // The conversation header opens Threadlight with the session on screen; the
+  // host resolves it to the owning workspace and redirects into that project.
+  const sessionEntry = new URL('threadlight/?session=' + noteReceipt.sessionId, result.base)
+  const sessionRedirect = await fetch(sessionEntry, { headers: { cookie }, redirect: 'manual' })
+  assert.equal(sessionRedirect.status, 303)
+  assert.equal(new URL(sessionRedirect.headers.get('location'), result.base).search,
+    '?workspace=' + encodeURIComponent(reviewWorkspace))
+  const sessionNotes = await fetch(new URL('threadlight/?session=' + noteReceipt.sessionId + '&view=notes', result.base),
+    { headers: { cookie }, redirect: 'manual' })
+  assert.equal(sessionNotes.status, 303)
+  assert.equal(new URL(sessionNotes.headers.get('location'), result.base).search,
+    '?notes=' + encodeURIComponent(reviewWorkspace))
+  const unknownSession = await fetch(new URL('threadlight/?session=' + randomUUID(), result.base),
+    { headers: { cookie } })
+  assert.equal(unknownSession.status, 200)
   assert.equal(noteEvents.prompts.length, 1)
   const queuedNotes = JSON.stringify(noteEvents.prompts[0])
   assert.match(queuedNotes, /用户只提交了批注，没有修改流程图/)
