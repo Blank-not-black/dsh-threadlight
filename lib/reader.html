@@ -144,7 +144,8 @@
     .relations-heading { margin-bottom: 15px; }
     .relations-map { position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0,1fr) minmax(140px,.75fr) minmax(0,1fr); gap: clamp(22px,3.3vw,48px); align-items: center; }
     .relations-map h3 { font-size: .86rem; margin-bottom: 6px; }
-    .relations-side, .relations-current { min-width: 0; overflow-wrap: anywhere; }
+    .map-wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; }
+    .relations-side, .relations-current { position: relative; z-index: 1; min-width: 0; overflow-wrap: anywhere; }
     .relations-current { position: relative; padding: 15px; border: 1px solid var(--accent); border-radius: 10px; background: var(--highlight); }
     .relations-current .relation { width: auto; }
     .relations-current strong { display: block; line-height: 1.4; margin-bottom: 5px; }

@@ -352,3 +352,13 @@ test('DSH review finds the module and resolves a selected step to its own flow',
   step.press('Enter')
   assert.equal(location.hash, '#step/export/sample/validate')
 })
+
+test('relation wires are an overlay instead of a third grid cell', () => {
+  const page = renderReader(parseGraph(raw))
+  // Without this rule the canvas becomes a grid item, pushes the three
+  // columns out of order and never receives the map's size.
+  assert.match(page, /\.map-wires \{[^}]*position: absolute/)
+  assert.match(page, /\.map-wires \{[^}]*inset: 0/)
+  assert.match(page, /\.map-wires \{[^}]*pointer-events: none/)
+  assert.match(page, /\.relations-side, \.relations-current \{[^}]*position: relative/)
+})
