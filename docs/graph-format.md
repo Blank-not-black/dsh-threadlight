@@ -113,4 +113,14 @@ generatedAt 使用与验证记录相同的时间格式。summary 为可选文本
 
 相同输入复用先前的快照。中断后可补齐一致的文件，遇冲突时报告路径。图谱发生变化时产出独立快照，为跨版本比对和保留手工笔记提供基础。
 
+### 发布历史与变动日志
+
+`refresh` 和 `report` 在图谱、查看器与状态写入成功后，用原子替换更新 `.threadlight/history.json`。该文件使用独立的 schemaVersion 1，`entries` 按发布时间追加，最多保留 200 条。同一 revision 只保留一条。历史缺失或无法解析时按空历史处理。
+
+每项含 `revision`、UTC 时间 `at` 和 `status`。刷新状态为 `updated`、`reviewed` 或 `rendered`，实现报告为 `reported`。可选的 `snapshotId` 对应本次生成或证据定位使用的工作树，`sessionId` 对应文档会话或提交回执中的实现会话。
+
+变动日志按稳定 ID 比较领域、功能区、线路与步骤。新增或删除整个分支时记录该分支的根。已有步骤的证据先按 path、kind 和 line 匹配，再按行号顺序配对同一文件和类型的剩余引用。步骤状态按显示值比较，验证记录按 id 匹配。JSON 每对版本包含 `from`、`to`、目标版本时间 `at`、排序依据 `orderSource` 和 `changes`。排序依据为 `history`、`mtime` 或 `explicit`。
+
+`reset` 与 `refresh`、`report` 共用发布锁。归档包含当前 `state.json`、`viewer.html`、`revisions/` 和已有的 `history.json`、`changes.md`。下次刷新开启新一轮发布历史。
+
 [JSON Canvas 规范](https://jsoncanvas.org/spec/1.0/) · [Obsidian 内部链接](https://obsidian.md/help/links) · [折叠提示框](https://obsidian.md/help/callouts)

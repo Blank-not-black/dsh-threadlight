@@ -299,7 +299,7 @@ button:disabled { opacity: .55; cursor: wait; }
 .workspace-list { list-style: none; padding: 0; margin: 0; }
 .workspace-list li {
   display: grid;
-  grid-template-columns: minmax(0,1fr) 8.5rem 8rem;
+  grid-template-columns: minmax(0,1fr) minmax(8.5rem, 14rem) auto;
   align-items: center;
   gap: 12px;
   min-height: 68px;
@@ -314,13 +314,15 @@ button:disabled { opacity: .55; cursor: wait; }
 .workspace-state { color: var(--quiet); font-size: .9rem; }
 [data-state="graph"] .workspace-state { color: var(--signal); }
 [data-state="issue"] .workspace-state,[data-state="unavailable"] .workspace-state { color: #ffbbaa; }
-.workspace-open { text-align: right; }
+.workspace-open { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .workspace-empty { display: flex; align-items: center; gap: 14px; padding: 18px; background: var(--surface); border: 1px solid var(--line); }
 
 @media (max-width: 740px) {
   .choice { --gutter: clamp(16px,3vw,24px); }
   .choice h2 strong { font-size: clamp(2.4rem,10vw,5rem); }
   .entry-button { padding-inline: 10px; gap: 8px; }
+  .workspace-list li { grid-template-columns: minmax(0,1fr); }
+  .workspace-open { justify-content: flex-start; }
 }
 @media (prefers-reduced-motion: reduce) {
   .intro .opening { display: none; }

@@ -1,12 +1,15 @@
 #!/usr/bin/env node
-import { resolve } from 'node:path'
+import { lstat, readdir } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { parseArgs } from 'node:util'
 import { MAX_GRAPH_BYTES, parseGraph } from '../lib/graph.mjs'
+import { diffGraphs, renderChangelog } from '../lib/graph-changelog.mjs'
 import { createLocalStore, readTextFile } from '../lib/local-store.mjs'
 import { exportObsidian } from '../lib/obsidian.mjs'
 import { publishReader } from '../lib/reader.mjs'
-import { refreshDocumentation } from '../lib/refresh.mjs'
+import { lock, readHistory, refreshDocumentation, replace, revisionPattern, safeDirectory } from '../lib/refresh.mjs'
+import { resetDocumentation } from '../lib/reset.mjs'
 import { captureWorkspace, repositoryRoot } from '../lib/git-workspace.mjs'
 import { enrichEvidence, openCodeIndexer } from '../lib/implementation-evidence.mjs'
 import { ingestImplementationReports } from '../lib/implementation-report.mjs'
@@ -18,6 +21,8 @@ const help = [
   '  dsh-threadlight view <graph.json> <output-parent> [--source repository [--code-index executable]]',
   '  dsh-threadlight refresh [repository] [--patch path] [--dsh-cli path] [--code-index executable]',
   '  dsh-threadlight report [repository] [--code-index executable]',
+  '  dsh-threadlight reset [repository]',
+  '  dsh-threadlight changelog [repository] [--limit N] [--from revision --to revision] [--format md|json]',
   '  dsh-threadlight watch [repository] [--patch path] [--dsh-cli path] [--code-index executable] [--interval seconds]',
   '  dsh-threadlight export <graph.json> <output-parent>  (Obsidian)',
 ].join('\n')
@@ -61,12 +66,110 @@ async function updateCommand() {
   }
 }
 
+async function localEntry(path) {
+  try { return await lstat(path) } catch (error) {
+    if (error.code === 'ENOENT') return null
+    throw error
+  }
+}
+
+async function changelogEntries(control, { from, to, limit }) {
+  const revisions = join(control, 'revisions')
+  for (const folder of [control, revisions]) {
+    const info = await localEntry(folder)
+    if (info && !info.isDirectory()) throw new Error('Threadlight output must be a real directory')
+  }
+  async function revisionInfo(revision) {
+    const directory = join(revisions, revision)
+    const info = await localEntry(directory)
+    if (!info?.isDirectory() || !(await localEntry(join(directory, 'graph.json')))?.isFile()) return null
+    return { revision, at: info.mtime.toISOString() }
+  }
+  const history = await readHistory(control)
+  let orderSource = 'history'
+  let versions = history
+  if (from !== undefined) {
+    orderSource = 'explicit'
+    versions = []
+    for (const revision of [from, to]) {
+      const info = await revisionInfo(revision)
+      if (!info) throw new Error('Threadlight revision does not exist: ' + revision)
+      versions.push(history.find(entry => entry.revision === revision) ?? info)
+    }
+  } else if (!history.length) {
+    orderSource = 'mtime'
+    const names = (await readdir(revisions).catch(error => {
+      if (error.code === 'ENOENT') return []
+      throw error
+    })).filter(name => revisionPattern.test(name))
+    versions = (await Promise.all(names.map(revisionInfo))).filter(Boolean)
+      .sort((a, b) => a.at.localeCompare(b.at) || a.revision.localeCompare(b.revision))
+  }
+
+  const entries = []
+  const graph = async revision => {
+    if (!await revisionInfo(revision)) throw new Error('Threadlight revision does not exist: ' + revision)
+    return parseGraph(await readTextFile(join(revisions, revision, 'graph.json'), MAX_GRAPH_BYTES))
+  }
+  let previous, last
+  for (const { revision, at } of versions.slice(-(limit + 1))) {
+    const current = await graph(revision)
+    if (last) entries.push({ from: last, to: revision, at, orderSource, changes: diffGraphs(previous, current) })
+    previous = current
+    last = revision
+  }
+  return { entries, orderSource }
+}
+
+async function changelogCommand() {
+  const { values, positionals } = parseArgs({ args, allowPositionals: true, options: {
+    limit: { type: 'string' }, from: { type: 'string' }, to: { type: 'string' }, format: { type: 'string' },
+  } })
+  if (positionals.length > 1) throw new Error(help)
+  const { from, to, format = 'md' } = values
+  const limit = Number(values.limit ?? 5)
+  if (!/^\d+$/.test(values.limit ?? '5') || !Number.isSafeInteger(limit) || limit < 1) {
+    throw new Error('--limit must be a positive integer')
+  }
+  if ((from === undefined) !== (to === undefined)) throw new Error('--from and --to must be provided together')
+  if (from !== undefined && ![from, to].every(revision => revisionPattern.test(revision))) {
+    throw new Error('Invalid Threadlight revision')
+  }
+  if (format !== 'md' && format !== 'json') throw new Error('--format must be md or json')
+  const control = join(await repositoryRoot(positionals[0] ?? '.'), '.threadlight')
+  if (format === 'json') {
+    const { entries, orderSource } = await changelogEntries(control, { from, to, limit })
+    if (orderSource === 'mtime' && !entries.length) console.error('历史记录不可用，版本顺序来自修订目录的文件修改时间。')
+    console.log(JSON.stringify(entries, null, 2))
+    return
+  }
+  await safeDirectory(control)
+  const release = await lock(control)
+  try {
+    const { entries, orderSource } = await changelogEntries(control, { from, to, limit })
+    const markdown = renderChangelog(entries, { limit, orderSource })
+    await replace(join(control, 'changes.md'), markdown)
+    process.stdout.write(markdown)
+  } finally {
+    await release()
+  }
+}
+
 async function run() {
   if (!command || command === '--help' || command === '-h') {
     console.log(help)
     return
   }
   if (command === 'refresh' || command === 'watch') return updateCommand()
+  if (command === 'changelog') return changelogCommand()
+  if (command === 'reset') {
+    const { positionals } = parseArgs({ args, allowPositionals: true })
+    if (positionals.length > 1) throw new Error(help)
+    const result = await resetDocumentation(await repositoryRoot(positionals[0] ?? '.'))
+    if (!result.archived) console.error('无需重置。')
+    console.log(JSON.stringify(result, null, 2))
+    return
+  }
   if (command === 'report') {
     const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { 'code-index': { type: 'string' } } })
     if (positionals.length > 1) throw new Error(help)

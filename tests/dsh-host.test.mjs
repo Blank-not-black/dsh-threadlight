@@ -7,6 +7,8 @@ import { join, relative } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
+import { parseGraph } from '../lib/graph.mjs'
+import { publishReader } from '../lib/reader.mjs'
 
 const cli = process.env.THREADLIGHT_DSH_CLI_ROOT
 
@@ -39,7 +41,11 @@ test('installed DSH serves the reviewer, exports notes and accepts a flow draft 
   exampleGraph.project.areas = [{ id: 'delivery', title: '交付' }]
   exampleGraph.groups[0].area = 'delivery'
   const example = JSON.stringify(exampleGraph)
-  await writeFile(join(workspace, '.threadlight/graph.json'), example, 'utf8')
+  const control = join(workspace, '.threadlight')
+  await writeFile(join(control, 'graph.json'), example, 'utf8')
+  const published = await publishReader(parseGraph(example), join(control, 'revisions'))
+  await writeFile(join(control, 'state.json'), JSON.stringify({ revision: published.revision }))
+  await writeFile(join(control, 'viewer.html'), await readFile(published.viewer))
   await writeFile(probePath, [
     "import { rename, writeFile } from 'node:fs/promises'",
     "import { setTimeout as delay } from 'node:timers/promises'",
@@ -185,6 +191,7 @@ test('installed DSH serves the reviewer, exports notes and accepts a flow draft 
   assert.match(workspacesHtml, /data-state="issue">\s*<div class="workspace-meta">\s*<strong>Unreadable graph fixture<\/strong>/)
   assert.match(workspacesHtml, /id="workspace-search"/)
   assert.match(workspacesHtml, /id="workspace-filter"/)
+  assert.equal([...workspacesHtml.matchAll(/data-reset-workspace="([^"]+)"/g)].map(match => match[1]).join(), result.ws)
   assert.match(await getPage(new URL('?workspace=missing', launcher)), /role="alert">找不到此工作区/)
   assert.match(html, /href="\?view=workspaces">切换工作区/)
   for (const asset of ['launch.js', 'launch.css']) {
@@ -313,7 +320,23 @@ test('installed DSH serves the reviewer, exports notes and accepts a flow draft 
   const copied = await post('drafts', { workspace: result.ws, id: randomUUID(), version: 0, ...copy })
   assert.equal(copied.status, 200, await copied.clone().text())
   assert.equal((await copied.json()).draft.base.flow, flow.id)
-  assert.equal(await readFile(join(workspace, '.threadlight/graph.json'), 'utf8'), example)
+  assert.equal((await post('reset', { workspace: result.ws }, { 'x-threadlight-client': 'other' })).status, 403)
+  assert.equal((await post('reset', {})).status, 404)
+  await writeFile(join(control, 'refresh.lock'), String(process.pid))
+  assert.equal((await post('reset', { workspace: result.ws })).status, 409)
+  assert.equal(await readFile(join(control, 'refresh.lock'), 'utf8'), String(process.pid))
+  await rm(join(control, 'refresh.lock'))
+  const reset = await post('reset', { workspace: result.ws })
+  assert.equal(reset.status, 200, await reset.clone().text())
+  const { archived, moved, next } = await reset.json()
+  assert.match(archived, /^\.threadlight\/archive\/\d{8}T\d{6}Z$/)
+  assert.deepEqual(moved, ['state.json', 'viewer.html', 'revisions'])
+  assert.equal(next, 'refresh')
+  assert.equal(JSON.parse(await readFile(join(workspace, archived, 'state.json'), 'utf8')).revision, published.revision)
+  assert.equal((await stat(join(workspace, archived, 'revisions', published.revision))).isDirectory(), true)
+  assert.equal(await readFile(join(control, 'graph.json'), 'utf8'), example)
+  assert.match(await readFile(join(control, 'annotations', group.id, savedNote.id + '.json'), 'utf8'), /safe note/)
+  assert.doesNotMatch(await getPage(workspaceList), /data-reset-workspace=/)
   const version = JSON.parse(await readFile(join(cli, 'package.json'), 'utf8')).version
   t.diagnostic('DSH ' + version + ', web profile, filesystem sandbox mode ' + (result.mode ?? '(none)'))
 })

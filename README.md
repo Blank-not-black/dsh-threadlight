@@ -14,7 +14,7 @@ npm ci
 npm run check
 ~~~
 
-在浏览器打开 CLI 返回的 `viewer`。功能总览默认显示项目和领域，逐级点击分支可展开功能区、线路和步骤。未声明领域的图谱从项目直接展开到功能区。筛选时自动展开命中路径。点击线路标题进入「操作流程」，点击步骤直接定位到该步骤。在「操作流程」中，可以从选中的步骤开始导览，逐步选择已记录的下一步，查看已走路线，或返回上一个选中的步骤。开启顶部「新手模式」可在阅读时查看术语解释。项目 Markdown 入口在右上角。
+在浏览器打开 CLI 返回的 `viewer`。功能总览以从左到右的拓扑图默认显示项目和领域，点击分支可逐级展开功能区、线路和步骤。未声明领域的图谱从项目直接展开到功能区。筛选时自动展开命中路径。点击线路标题进入「操作流程」，点击步骤直接定位到该步骤。在「操作流程」中，可以从选中的步骤开始导览，逐步选择已记录的下一步，查看已走路线，或返回上一个选中的步骤。开启顶部「新手模式」可在阅读时查看术语解释。项目 Markdown 入口在右上角。
 
 想看跨线路关系时，用同一条 `view` 命令打开 [Threadlight 自身的架构示例](examples/architecture.graph.json)，选择「刷新项目文档」，再切到「功能关系」。实线表示操作接续，虚线表示一条线路使用另一条线路。
 
@@ -34,7 +34,7 @@ dsh --profile web
 在 DSH 侧栏下方点 **Threadlight**，也可以通过同一 DSH Web 地址下的 `/threadlight/` 进入。
 
 - 左侧 **See** 打开创建页。DSH 提供系统目录选择器时，点「选择目录」，可以在选择器里新建文件夹或选用已有目录。DSH 提供网页目录能力时，可以填写父目录和新目录名称直接创建，也可以登记已有目录。工作区名称默认取项目目录名。
-- 右侧 **Shape** 打开工作区列表，可按名称或路径搜索，也可按状态筛选。已发布图谱的项目打开图谱，其余可用项目打开草稿编辑器。图谱或空工作区的草稿页可通过「切换工作区」回到列表。
+- 右侧 **Shape** 打开工作区列表，可按名称或路径搜索，也可按状态筛选。已发布图谱的项目打开图谱，其余可用项目打开草稿编辑器。已发布图谱的工作区可以在列表点「重置图谱」，确认后归档当前图谱和发布历史。图谱或草稿页可通过「切换工作区」回到列表。
 
 - 右键功能区标题，选「模块批注」。可以回看批注并追加新批注。批注按模块 ID 保存在工作区的 `.threadlight/annotations/`，图谱更新会保留同一模块的批注。
 - 在线路介绍、步骤卡片或步骤详情中选中文字，再右键选「询问含义」或「进一步讲解」。解释会显示在当前页面，使用 DSH 当前配置的默认模型。模型请求带有选文、图谱上下文和相关源码引用位置，无工具调用。解释和文档生成各自运行。
@@ -58,6 +58,19 @@ node bin/dsh-threadlight.mjs watch D:/your-project --patch D:/config/threadlight
 - Threadlight 对工作树里的可分析文本建立快照。包含已跟踪文件的本地编辑与删除、未忽略的新文件以及分支切换造成的源码差异。采集范围见下方。发送到模型的源码范围取决于模型在这些文件中的读取。
 - 每次变动使用新的 DSH headless 会话和临时源码副本。会话调用 `threadlight-document-project`，收到变更文件列表、原图谱和受影响线路，交回补丁。结果中的 `affectedFlows` 和 `flowChanges` 分别报告受影响线路数和实际新增、修改、删除数量。`updated` 表示文档内容或引用定位有改动，`reviewed` 表示已处理新源码快照且文档内容与定位相同，`unchanged` 表示无需启动文档会话。无法可靠重新定位的旧证据会显示「证据待复核」。
 - 若生成失败，图谱查看器继续使用上一次成功发布的版本。监听会等下一个源码快照，也可以手动用 `refresh` 重试。
+
+### 重置图谱与查看版本差异
+
+~~~powershell
+node bin/dsh-threadlight.mjs reset D:/your-project
+node bin/dsh-threadlight.mjs refresh D:/your-project --patch D:/config/threadlight-model.json
+node bin/dsh-threadlight.mjs changelog D:/your-project --limit 5
+node bin/dsh-threadlight.mjs changelog D:/your-project --from <revision> --to <revision> --format json
+~~~
+
+`reset` 将已发布的状态、查看器、版本、历史和变动日志移到 `.threadlight/archive/<UTC 时间戳>/`。草稿、批注、实现报告、Obsidian 导出和手写的 `.threadlight/graph.json` 保留。命令输出仓库相对归档路径、实际移动项和下一步 `refresh`。没有可归档项时路径为 `null`。刷新或报告正持有发布锁时，稍后再重置。重置之后运行 `refresh` 即可启动全量生成。Web 入口使用相同的归档规则。
+
+`changelog` 默认比较最近 5 对连续发布，输出中文 Markdown，同时写入 `.threadlight/changes.md`。`--from` 和 `--to` 可比较当前 `revisions/` 中任意两个版本。`--format json` 仅输出差异数组。历史缺失或无效时，默认比较按修订目录的修改时间排序。
 
 ### 把实现结果回挂到图谱
 

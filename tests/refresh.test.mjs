@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict'
-import { execFileSync } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { execFileSync, spawnSync } from 'node:child_process'
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
+import { fileURLToPath } from 'node:url'
 import { captureWorkspace } from '../lib/git-workspace.mjs'
 import { refreshDocumentation } from '../lib/refresh.mjs'
+import { resetDocumentation } from '../lib/reset.mjs'
+
+const threadlightCli = fileURLToPath(new URL('../bin/dsh-threadlight.mjs', import.meta.url))
 
 const fakeDsh = `
 import assert from 'node:assert/strict'
@@ -103,10 +107,21 @@ test('independent DSH sessions generate synchronized Markdown and viewer and pre
   await writeFile(statePath, JSON.stringify(state))
   await writeFile(first.viewer, 'old reader')
   assert.equal((await refreshDocumentation(root, { dshCli: 'unneeded' })).status, 'rendered')
+  const history = join(root, '.threadlight/history.json')
+  const firstHistory = JSON.parse(await readFile(history, 'utf8'))
+  assert.equal(firstHistory.schemaVersion, 1)
+  assert.equal(firstHistory.entries.length, 1)
+  assert.equal(firstHistory.entries[0].revision, first.snapshot)
+  assert.equal(firstHistory.entries[0].status, 'updated')
+  assert.equal(firstHistory.entries[0].snapshotId, state.source.id)
+  assert.equal(firstHistory.entries[0].sessionId, first.sessionId)
+  assert.ok(Number.isFinite(Date.parse(firstHistory.entries[0].at)))
+  await writeFile(history, '{ broken history')
   assert.match(await readFile(first.viewer, 'utf8'), /The protocol for file requests\./)
   await writeFile(join(root, 'src/upload.js'), 'export const action = "resume upload"\n')
   await writeFile(join(root, 'src/retry.js'), 'export const retries = 3\n')
   const next = await refreshDocumentation(root, { dshCli: cli })
+  assert.deepEqual(JSON.parse(await readFile(history, 'utf8')).entries.map(entry => entry.revision), [next.snapshot])
   assert.equal(next.status, 'updated')
   assert.equal(next.sessionId, 'fixture-incremental')
   assert.equal(next.affectedFlows, 1)
@@ -258,12 +273,47 @@ test('refresh recovers a dead lock and rejects refreshes while its live owner is
   try {
     await Promise.race([entered.promise, owner])
     await assert.rejects(refreshDocumentation(root, { dshCli: cli }), /Another Threadlight refresh owns/)
+    await assert.rejects(resetDocumentation(root), { code: 'THREADLIGHT_LOCKED' })
     assert.equal((await readFile(lock, 'utf8')).trim(), String(process.pid))
   } finally {
     finish.resolve()
     await owner
   }
   await assert.rejects(readFile(lock), { code: 'ENOENT' })
+})
+
+test('reset archives the publication, keeps workspace data and allows a full refresh of unchanged source', async t => {
+  const { root, cli } = await fixture(t)
+  const control = join(root, '.threadlight')
+  const first = await refreshDocumentation(root, { dshCli: cli })
+  const kept = ['drafts', 'annotations', 'implementation', 'obsidian']
+  for (const name of kept) {
+    await mkdir(join(control, name))
+    await writeFile(join(control, name, 'keep'), name)
+  }
+  await writeFile(join(control, 'graph.json'), 'authored graph')
+  await writeFile(join(control, 'changes.md'), '# 图谱变动日志\n')
+  const run = () => spawnSync(process.execPath, [threadlightCli, 'reset'], { cwd: root, encoding: 'utf8', windowsHide: true })
+  const reset = run()
+  assert.equal(reset.status, 0, reset.stderr)
+  const { archived, moved, next } = JSON.parse(reset.stdout)
+  assert.match(archived, /^\.threadlight\/archive\/\d{8}T\d{6}Z$/)
+  assert.equal(next, 'refresh')
+  assert.deepEqual(moved, ['state.json', 'viewer.html', 'revisions', 'history.json', 'changes.md'])
+  assert.deepEqual((await readdir(join(root, archived))).sort(), moved.toSorted())
+  assert.deepEqual((await readdir(control)).sort(), ['archive', 'graph.json', ...kept].toSorted())
+  for (const name of kept) assert.equal(await readFile(join(control, name, 'keep'), 'utf8'), name)
+  assert.equal(await readFile(join(control, 'graph.json'), 'utf8'), 'authored graph')
+  const repeated = run()
+  assert.equal(repeated.status, 0, repeated.stderr)
+  assert.match(repeated.stderr, /无需重置/)
+  assert.deepEqual(JSON.parse(repeated.stdout), { archived: null, moved: [], next: 'refresh' })
+
+  const regenerated = await refreshDocumentation(root, { dshCli: cli })
+  assert.equal(regenerated.sessionId, 'fixture-full')
+  assert.equal(regenerated.snapshot, first.snapshot)
+  const history = JSON.parse(await readFile(join(control, 'history.json'), 'utf8'))
+  assert.deepEqual(history.entries.map(entry => entry.revision), [regenerated.snapshot])
 })
 
 test('workspace capture includes authentication code and supported languages while excluding credential files', async t => {
