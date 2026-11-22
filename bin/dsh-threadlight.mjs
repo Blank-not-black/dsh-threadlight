@@ -9,6 +9,7 @@ import { publishReader } from '../lib/reader.mjs'
 import { refreshDocumentation } from '../lib/refresh.mjs'
 import { captureWorkspace, repositoryRoot } from '../lib/git-workspace.mjs'
 import { enrichEvidence, openCodeIndexer } from '../lib/implementation-evidence.mjs'
+import { ingestImplementationReports } from '../lib/implementation-report.mjs'
 import { anchorSources } from '../lib/source-anchors.mjs'
 
 const help = [
@@ -16,6 +17,7 @@ const help = [
   '  dsh-threadlight validate <graph.json>',
   '  dsh-threadlight view <graph.json> <output-parent> [--source repository [--code-index executable]]',
   '  dsh-threadlight refresh [repository] [--patch path] [--dsh-cli path] [--code-index executable]',
+  '  dsh-threadlight report [repository] [--code-index executable]',
   '  dsh-threadlight watch [repository] [--patch path] [--dsh-cli path] [--code-index executable] [--interval seconds]',
   '  dsh-threadlight export <graph.json> <output-parent>  (Obsidian)',
 ].join('\n')
@@ -65,6 +67,14 @@ async function run() {
     return
   }
   if (command === 'refresh' || command === 'watch') return updateCommand()
+  if (command === 'report') {
+    const { values, positionals } = parseArgs({ args, allowPositionals: true, options: { 'code-index': { type: 'string' } } })
+    if (positionals.length > 1) throw new Error(help)
+    const result = await ingestImplementationReports(positionals[0] ?? '.', { codeIndex: values['code-index'] })
+    console.log(JSON.stringify(result, null, 2))
+    if (result.rejected.length) process.exitCode = 1
+    return
+  }
   if (command === 'view') {
     const { values, positionals: [input, output, ...rest] } = parseArgs({ args, allowPositionals: true, options: {
       source: { type: 'string' }, 'code-index': { type: 'string' },
