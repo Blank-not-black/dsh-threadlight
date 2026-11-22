@@ -4,6 +4,14 @@
   "description": "A DSH plugin for documenting Git projects and exploring source-linked workflows.",
   "license": "MIT",
   "author": "Blank_not_black <2687104205@qq.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Blank-not-black/dsh-threadlight.git"
+  },
+  "homepage": "https://github.com/Blank-not-black/dsh-threadlight#readme",
+  "bugs": {
+    "url": "https://github.com/Blank-not-black/dsh-threadlight/issues"
+  },
   "type": "module",
   "exports": {
     ".": "./index.mjs",
