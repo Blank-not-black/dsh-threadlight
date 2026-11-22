@@ -24,6 +24,8 @@
   color: inherit; font: inherit; resize: vertical;
 }
 .review-status { margin-top: 10px; color: var(--quiet); }
+.review-status:empty { margin: 0; }
+.review-dialog button:disabled { opacity: .55; cursor: default; }
 .review-notes { list-style: none; padding: 0; }
 .review-notes:empty { display: none; }
 .review-notes li + li { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }

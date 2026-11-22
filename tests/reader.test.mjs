@@ -6,9 +6,10 @@ import { runInNewContext } from 'node:vm'
 import { parseGraph } from '../lib/graph.mjs'
 import { renderReader } from '../lib/reader.mjs'
 
-const [raw, reviewScript] = await Promise.all([
+const [raw, reviewScript, notesScript] = await Promise.all([
   readFile(new URL('../examples/basic.graph.json', import.meta.url), 'utf8'),
   readFile(new URL('../lib/dsh-review.js', import.meta.url), 'utf8'),
+  readFile(new URL('../lib/dsh-notes.js', import.meta.url), 'utf8'),
 ])
 
 function graphWithAreas() {
@@ -74,7 +75,10 @@ function loadOverview(graph, { review = false, clientHeight = 320, reply = () =>
       this.children.splice(next ? this.children.indexOf(next) : this.children.length, 0, child)
     }
     append(...children) {
-      for (const child of children) this.insertBefore(child, null)
+      for (const child of children) {
+        const node = typeof child === 'string' ? Object.assign(new Element('#text'), { textContent: child }) : child
+        this.insertBefore(node, null)
+      }
     }
     prepend(...children) {
       const first = this.firstElementChild
@@ -199,7 +203,7 @@ function loadOverview(graph, { review = false, clientHeight = 320, reply = () =>
     input.value = value
     input.dispatch('input')
   }
-  return { by, visible, cards, kinds, wires, filter, focused: () => document.activeElement, location, processRoutes,
+  return { by, document, visible, cards, kinds, wires, filter, focused: () => document.activeElement, location, processRoutes,
     reviewCurrent, reviewRequests, reviewMenu: () => document.querySelector('.review-menu'),
     reviewDialog: () => document.querySelector('.review-dialog'),
     goToOverview() { location.hash = '#overview'; windowEvents.get('hashchange')() },
@@ -376,16 +380,18 @@ test('review dialog scopes annotations and saves, edits, and deletes a quoted no
   const old = { id: 'module-note', target: { kind: 'group' }, text: '旧模块批注', createdAt: stamp }
   const previous = { id: 'step-note', target, text: '原有批注', createdAt: stamp }
   let confirmed = false
-  const { cards, filter, reviewMenu, reviewDialog, reviewRequests, select } = loadOverview(graphWithAreas(), {
+  const { by, cards, filter, reviewMenu, reviewDialog, reviewRequests, select } = loadOverview(graphWithAreas(), {
     review: true,
     confirm: () => confirmed,
-    reply(_url, body, method) {
+    reply(url, body, method) {
+      if (url === 'api/annotations-submit') return { submission: { sessionId: 'fixture-session' } }
       if (method === 'GET') return { notes: [old, previous] }
       if (method === 'POST') return { note: { ...body, id: 'new-note', createdAt: stamp } }
       if (method === 'PATCH') return { note: { ...body, id: 'new-note', target, quote, createdAt: stamp, updatedAt: stamp } }
       return { deleted: true }
     },
   })
+  assert.equal(by('header-actions').querySelectorAll('a').find(link => link.textContent === '批注箱').href, '?notes=test')
   filter('示例筛选词')
   const [, , group, flow, step] = cards()
   const title = step.querySelector('[data-review-text]')
@@ -416,8 +422,17 @@ test('review dialog scopes annotations and saves, edits, and deletes a quoted no
   assert.deepEqual(reviewRequests.at(-1), ['api/annotations', { ...common, id: 'new-note', text: '修改后的正文' }, 'PATCH'])
   assert.equal(rows[0].querySelector('p').textContent, '修改后的正文')
   assert.match(rows[0].querySelector('time').textContent, /^修改于 /)
+  const submitLabel = '提交给 DSH（无需修改流程图）'
+  const submitButton = dialog.querySelectorAll('button').find(button => button.textContent === submitLabel)
+  assert.equal(submitButton.disabled, false)
+  submitButton.click()
+  assert.equal(submitButton.disabled, true)
+  await setImmediate()
+  assert.deepEqual(reviewRequests.at(-1), ['api/annotations-submit', { workspace: 'test', digest: 'test',
+    ids: ['new-note', 'step-note'] }, 'POST'])
+  assert.equal(dialog.querySelectorAll('.review-status').at(-1).textContent, '已提交到 DSH · 会话 fixture-session')
   click(rows[0], '删除')
-  assert.equal(reviewRequests.at(-1)[2], 'PATCH')
+  assert.equal(reviewRequests.at(-1)[0], 'api/annotations-submit')
   confirmed = true
   click(rows[0], '删除')
   await setImmediate()
@@ -440,6 +455,60 @@ test('review dialog scopes annotations and saves, edits, and deletes a quoted no
   assert.equal(dialog.querySelector('h2').textContent, '线路批注 · 另一条线路')
   assert.equal(dialog.querySelector('blockquote').textContent, '另一条线路')
   assert.equal(dialog.querySelector('.review-notes').children.length, 0)
+  assert.equal(dialog.querySelectorAll('button').find(button => button.textContent === submitLabel).disabled, true)
+})
+
+test('the annotation inbox selects by module and marks the notes identified in a successful receipt', async () => {
+  const { by, document } = loadOverview(graphWithAreas())
+  const createdAt = '2026-11-22T00:00:00.000Z'
+  const submittedAt = '2026-11-22T00:15:00.000Z'
+  const notes = [
+    { id: 'one', group: 'first', groupTitle: '模块一', target: { kind: 'group' }, text: '第一条', createdAt, submitted: null },
+    { id: 'two', group: 'first', groupTitle: '模块一', target: { kind: 'step' }, flowTitle: '线路', stepTitle: '步骤',
+      text: '第二条', quote: '  选文\n', createdAt, submitted: null },
+    { id: 'three', group: 'second', groupTitle: '模块二', target: { kind: 'group' }, text: '第三条', createdAt,
+      submitted: { sessionId: 'older-session', submittedAt } },
+  ]
+  by('notes-context').textContent = JSON.stringify({ workspace: 'inbox', digest: 'current', project: '示例', maxSelection: 100 })
+  let fail = true
+  runInNewContext(notesScript, { document, URLSearchParams, async fetch(url, options) {
+    assert.equal(options.headers['x-threadlight-client'], 'review')
+    if (!options.method) {
+      assert.equal(url, 'api/annotations?workspace=inbox&digest=current&all=1')
+      return { ok: true, json: async () => ({ notes }) }
+    }
+    assert.equal(url, 'api/annotations-submit')
+    assert.deepEqual(JSON.parse(options.body), { workspace: 'inbox', digest: 'current', ids: ['one', 'two'] })
+    return fail ? { ok: false, json: async () => ({ error: '请重试' }) } : { ok: true, json: async () => ({
+      submission: { noteIds: ['one', 'two'], sessionId: 'new-session', submittedAt },
+    }) }
+  } })
+  await setImmediate()
+  const [first, second] = by('groups').children
+  const [toggle, one, two] = first.querySelectorAll('input')
+  assert.equal(by('return').href, '?workspace=inbox')
+  assert.equal(by('total').textContent, '3 条批注')
+  assert.equal(first.querySelector('blockquote').textContent, notes[1].quote)
+  assert.equal(by('submit').disabled, true)
+  one.checked = true
+  one.dispatch('change')
+  assert.equal(toggle.indeterminate, true)
+  toggle.checked = true
+  toggle.dispatch('change')
+  assert.equal(two.checked, true)
+  assert.equal(by('selected').textContent, '已选 2 条')
+  by('submit').click()
+  assert.equal(by('submit').disabled, true)
+  await setImmediate()
+  assert.equal(by('status').textContent, '请重试')
+  assert.equal(by('submit').disabled, false)
+  fail = false
+  by('submit').click()
+  await setImmediate()
+  assert.equal(by('status').textContent, '已提交到 DSH · 会话 new-session')
+  assert.deepEqual(first.querySelectorAll('.submitted').map(badge => badge.textContent), Array(2).fill('已提交 · 会话 new-sess'))
+  assert.equal(second.querySelector('.submitted').textContent, '已提交 · 会话 older-se')
+  assert.equal(by('selected').textContent, '已选 0 条')
 })
 
 test('relation wires are an overlay instead of a third grid cell', () => {

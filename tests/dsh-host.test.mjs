@@ -12,7 +12,7 @@ import { publishReader } from '../lib/reader.mjs'
 
 const cli = process.env.THREADLIGHT_DSH_CLI_ROOT
 
-test('installed DSH serves the reviewer, exports notes and accepts a flow draft as a workspace task', { skip: !cli, timeout: 45000 }, async t => {
+test('installed DSH serves the reviewer, exports notes and accepts annotations and drafts as workspace tasks', { skip: !cli, timeout: 45000 }, async t => {
   const home = await mkdtemp(join(tmpdir(), 'threadlight-dsh-'))
   const workspace = join(home, 'workspace')
   const emptyWorkspace = join(home, 'empty-workspace')
@@ -81,7 +81,7 @@ test('installed DSH serves the reviewer, exports notes and accepts a flow draft 
     "      const id = new URL(req.url, 'http://dsh.invalid').searchParams.get('id')",
     "      const session = await ctx.sessionController.inspect(id)",
     "      const prompts = session.events.filter(event => event.type === 'agent/inbox/spliced').flatMap(event => event.data.inserted).filter(message => message.source.kind === 'user')",
-    "      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ cwd: session.meta.cwd, prompts, ids: empty.sessionIds }))",
+    "      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ cwd: session.meta.cwd, prompts, ids: empty.sessionIds, graphIds: ws.sessionIds }))",
     "    } }))",
     "    const base = 'http://127.0.0.1:' + ctx.webServer.port + '/'",
     "    const launch = ctx.connection.authenticatedUrl(base)",
@@ -277,6 +277,72 @@ test('installed DSH serves the reviewer, exports notes and accepts a flow draft 
   assert.deepEqual(updated, { ...stepNote, text: '修改后的批注', updatedAt: updated.updatedAt })
   assert.deepEqual(JSON.parse(await readFile(noteFile(stepNote.id), 'utf8')), { ...updated, module: group.id, graph: digest })
   assert.deepEqual(new Map((await getNotes()).map(note => [note.id, note])), new Map([savedNote, updated, flowNote].map(note => [note.id, note])))
+
+  const notesPage = new URL('?notes=' + reviewWorkspace, launcher)
+  assert.equal((await fetch(notesPage)).status, 401)
+  const notesHtml = await getPage(notesPage)
+  assert.match(notesHtml, /批注箱/)
+  assert.deepEqual(JSON.parse(notesHtml.match(/id="notes-context" type="application\/json">(.*?)<\/script>/s)[1]),
+    { workspace: reviewWorkspace, digest, project: data.project.name, maxSelection: 100 })
+  for (const asset of ['notes.js', 'notes.css']) {
+    assert.equal((await fetch(new URL(asset, notesPage), { headers: { cookie } })).status, 200)
+  }
+  const getAllNotes = async () => {
+    const url = new URL('api/annotations?' + new URLSearchParams({ workspace: reviewWorkspace, all: '1' }), notesPage)
+    const response = await fetch(url, { headers: { cookie, 'x-threadlight-client': 'review' } })
+    assert.equal(response.status, 200, await response.clone().text())
+    return new Map((await response.json()).notes.map(note => [note.id, note]))
+  }
+  const removedGroup = 'removed-module'
+  const orphanDirectory = join(control, 'annotations', removedGroup)
+  const orphan = { ...updated, id: randomUUID(), module: removedGroup, graph: 'previous-graph' }
+  await mkdir(orphanDirectory)
+  await writeFile(join(orphanDirectory, orphan.id + '.json'), JSON.stringify(orphan))
+  const allNotes = await getAllNotes()
+  assert.deepEqual(allNotes.get(savedNote.id), {
+    ...savedNote, group: group.id, groupTitle: group.title, submitted: null,
+  })
+  assert.deepEqual(allNotes.get(flowNote.id), {
+    ...flowNote, group: group.id, groupTitle: group.title, flowTitle: flow.title, submitted: null,
+  })
+  assert.deepEqual(allNotes.get(stepNote.id), {
+    ...updated, group: group.id, groupTitle: group.title, flowTitle: flow.title, stepTitle: flow.nodes[0].title, submitted: null,
+  })
+  assert.equal(allNotes.get(orphan.id).groupTitle, removedGroup)
+  assert.equal(allNotes.get(orphan.id).flowTitle, flow.id)
+  assert.equal(allNotes.get(orphan.id).stepTitle, flow.nodes[0].id)
+  const noteSubmission = { workspace: reviewWorkspace, ids: [savedNote.id, updated.id] }
+  const submitNotes = (fields = {}, headers = {}) => post('annotations-submit', { ...noteSubmission, ...fields }, headers)
+  assert.equal((await submitNotes({}, { 'sec-fetch-site': 'cross-site' })).status, 403)
+  for (const ids of [[], ['../outside'], Array(101).fill(savedNote.id)]) {
+    assert.equal((await submitNotes({ ids })).status, 400)
+  }
+  assert.equal((await submitNotes({ ids: [savedNote.id, randomUUID()] })).status, 404)
+  assert.equal((await submitNotes({ digest: 'stale' })).status, 409)
+  assert.equal((await submitNotes({ ids: [orphan.id] })).status, 409)
+  const submittedNotes = await submitNotes()
+  assert.equal(submittedNotes.status, 200, await submittedNotes.clone().text())
+  const { submission: noteReceipt } = await submittedNotes.json()
+  const noteRetry = await submitNotes({ ids: [...noteSubmission.ids].reverse(), digest })
+  assert.deepEqual(await noteRetry.json(), { submission: noteReceipt })
+  const noteSessionUrl = new URL('threadlight-fixture-session?id=' + noteReceipt.sessionId, result.base)
+  const noteSession = await fetch(noteSessionUrl, { headers: { cookie } })
+  assert.equal(noteSession.status, 200)
+  const noteEvents = await noteSession.json()
+  assert.equal(relative(workspace, noteEvents.cwd), '')
+  assert.deepEqual(noteEvents.graphIds, [noteReceipt.sessionId])
+  assert.equal(noteEvents.prompts.length, 1)
+  const queuedNotes = JSON.stringify(noteEvents.prompts[0])
+  assert.match(queuedNotes, /用户只提交了批注，没有修改流程图/)
+  assert.ok(queuedNotes.includes(savedNote.text))
+  assert.ok(queuedNotes.includes(updated.text))
+  assert.equal(noteEvents.prompts[0].source.rpcId, noteReceipt.requestId)
+  const refreshedNotes = await getAllNotes()
+  for (const id of noteSubmission.ids) assert.deepEqual(refreshedNotes.get(id).submitted,
+    { sessionId: noteReceipt.sessionId, submittedAt: noteReceipt.submittedAt })
+  assert.equal(refreshedNotes.get(flowNote.id).submitted, null)
+  assert.deepEqual(JSON.parse(await readFile(noteFile(updated.id), 'utf8')), { ...updated, module: group.id, graph: digest })
+
   assert.deepEqual(await (await mutate('DELETE')).json(), { deleted: true })
   await assert.rejects(readFile(noteFile(stepNote.id)), { code: 'ENOENT' })
   assert.equal((await mutate('PATCH', { text: '不得重建' })).status, 404)

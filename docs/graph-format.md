@@ -59,6 +59,12 @@ target 的 kind 可取 group、flow 或 step。group 以 module 为目标，flow
 
 `GET /threadlight/api/annotations` 返回指定模块的批注列表。`POST` 新建并返回 `{ note }`，`PATCH` 按 id 修改正文并返回 `{ note }`，`DELETE` 按 id 删除文件并返回 `{ deleted: true }`。请求需提供 workspace、group 和当前 digest，写请求沿用审阅页的同源校验。目标无效返回 400，找不到待修改或删除的批注返回 404，图谱已更新返回 409。
 
+`GET /threadlight/api/annotations?workspace=<id>&all=1` 返回工作区全部批注，附加 group、groupTitle、适用的 flowTitle 和 stepTitle，以及 `submitted: { sessionId, submittedAt } | null`。标题无法解析时显示对应 ID。有多个回执时显示最近一次接收记录。
+
+`POST /threadlight/api/annotations-submit` 接收 workspace、1 至 100 个批注 UUID 组成的 ids，以及可选的 digest。省略 digest 时使用当前图谱摘要。每条批注都须属于该工作区和当前图谱，且能解析到目标。批注缺失返回 404，摘要或批注所属图谱不匹配返回 409。接口只读取批注，DSH 接收任务后返回 `{ submission }`。
+
+回执保存在 `.threadlight/submissions/<digest>.json`，包含 schemaVersion（固定为 1）、digest、noteIds、workspace、sessionId、requestId、prompt 和 ISO-8601 格式的 submittedAt。回执的 digest 取去重、排序后的 UUID 数组 JSON 的 SHA-256，区别于图谱摘要。相同批注 ID 集合重复提交会返回已有回执，顺序和正文编辑不改变提交标识。DSH 拒收时返回 502，同一集合的重试从 `<digest>.pending.json` 复用会话 ID、请求 ID 和提示词。批注箱读取有效的接收回执，跳过待提交记录和损坏文件。
+
 ## 流程草稿
 
 DSH Web 将流程草稿保存在工作区的 `.threadlight/drafts/<草稿 ID>/<版本>.json`。草稿有独立的 schemaVersion 1，记录 id、version、时间、plan 和可选的 base。复制已有线路时，base 记录原图谱摘要、线路标识、原始流程和证据。保存按版本追加，既有实现图谱继续作为阅读和导出的依据。
