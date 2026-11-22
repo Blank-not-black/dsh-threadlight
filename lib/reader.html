@@ -50,25 +50,39 @@
     .overview-search { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 12px; margin-bottom: 12px; font-size: .88rem; }
     .overview-search input, .nav input { border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; background: var(--panel); }
     .overview-search input { width: min(24rem,100%); }
-    .overview-tree { --indent: clamp(12px,2.4vw,24px); list-style: none; margin: 0; padding: clamp(9px,2vw,20px); max-width: 920px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel); }
-    .overview-tree [role="group"] { list-style: none; margin: 3px 0 4px 14px; padding: 0 0 0 var(--indent); border-left: 1px solid var(--line); }
-    .overview-tree [role="treeitem"] { position: relative; }
-    .overview-tree [role="group"] > [role="treeitem"]::before { content: ""; position: absolute; top: 19px; right: 100%; width: var(--indent); border-top: 1px solid var(--line); }
-    .tree-row { display: flex; align-items: baseline; gap: 6px; min-height: 38px; padding: 6px 7px; border-radius: 6px; overflow-wrap: anywhere; }
-    .tree-row small { display: block; color: var(--quiet); white-space: pre-wrap; }
-    .tree-row[data-kind="project"] { color: var(--accent); }
-    .tree-kind { flex: none; font-size: .76rem; color: var(--quiet); }
-    .tree-toggle { flex: 0 0 14px; color: var(--accent); text-align: center; }
-    .tree-toggle::before { content: "•"; }
-    [aria-expanded] > .tree-row .tree-toggle::before { content: "▸"; }
-    [aria-expanded="true"] > .tree-row .tree-toggle::before { content: "▾"; }
-    [aria-expanded] > .tree-row, .tree-row[data-kind="step"] { cursor: pointer; }
-    .tree-row:hover, .overview-tree [role="treeitem"]:focus-visible > .tree-row { background: var(--highlight); }
-    .overview-tree [role="treeitem"]:focus-visible { outline: none; }
-    .overview-tree [role="treeitem"]:focus-visible > .tree-row { outline: 2px solid var(--accent); outline-offset: 1px; }
-    .tree-open { border: 0; border-radius: 3px; padding: 0 2px; color: var(--accent); background: none; text-align: left; overflow-wrap: anywhere; }
-    .tree-open:hover { text-decoration: underline; }
-    .tree-row[data-kind="step"] .tree-label { color: var(--accent); }
+    .overview-viewport { overflow: auto; max-height: max(220px, calc(100dvh - 220px)); border: 1px solid var(--line); border-radius: 13px; background: var(--panel); }
+    .overview-map { position: relative; }
+    .overview-map svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    .overview-wire { fill: none; stroke: var(--line); stroke-width: 1.25px; transition: d 150ms ease, stroke 150ms ease, opacity 150ms ease; }
+    .overview-wire.expanded, .overview-wire.focused { stroke: var(--accent); }
+    .overview-wire.focused { stroke-width: 2px; }
+    .overview-position { position: absolute; transition: left 150ms ease, top 150ms ease, opacity 150ms ease; }
+    .overview-card { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; height: 100%; padding: 6px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); text-align: left; line-height: 1.25; }
+    .overview-card:hover, .overview-card:focus-visible { border-color: var(--accent); }
+    .overview-card[data-match] { border-color: var(--accent); background: var(--highlight); }
+    .overview-card[data-kind="project"] { border-color: var(--root-fill); background: var(--root-fill); color: var(--root-ink); }
+    .overview-card[data-kind="project"][data-match] { box-shadow: inset 0 0 0 2px var(--root-ink); }
+    .overview-card[data-kind="area"] { border-color: color-mix(in srgb, var(--dependency) 50%, var(--line)); }
+    .overview-card[data-kind="area"]:hover, .overview-card[data-kind="area"]:focus-visible { border-color: var(--dependency); }
+    .overview-label { min-width: 0; flex: 1; }
+    .overview-kind { display: block; margin-bottom: 2px; color: var(--quiet); font-size: .72rem; }
+    [data-kind="project"] .overview-kind { color: inherit; }
+    [data-kind="area"] .overview-kind { color: var(--dependency); }
+    .overview-label strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .9rem; font-weight: 640; }
+    .overview-card[data-kind="step"] strong { font-weight: 520; }
+    .overview-card [data-review-text] { user-select: text; }
+    .overview-expander { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 24px; color: var(--accent); font-size: .76rem; }
+    .overview-expander::after { content: "▸"; }
+    [aria-expanded="true"] > .overview-expander::after, .overview-expander[aria-expanded="true"]::after { content: "▾"; }
+    [data-kind="project"] .overview-expander { color: inherit; }
+    .overview-position[data-kind="flow"][aria-expanded] .overview-card { padding-right: 62px; }
+    .overview-flow-toggle { position: absolute; top: 9px; bottom: 9px; right: 6px; min-width: 47px; padding: 0 5px; border: 0; border-left: 1px solid var(--line); border-radius: 0 5px 5px 0; background: transparent; }
+    .overview-flow-toggle:hover, .overview-flow-toggle:focus-visible { background: var(--highlight); }
+    .overview-state { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--quiet); }
+    .overview-state.implemented { background: var(--dependency); }
+    .overview-state.verified { background: var(--accent); }
+    @starting-style { .overview-position, .overview-wire { opacity: 0; } }
+    @media(prefers-reduced-motion: reduce) { .overview-position, .overview-wire { transition: none; } }
     .relation-entry { display: flex; align-items: center; justify-content: space-between; gap: 10px; text-align: left; width: 100%; border: 0; border-radius: 6px; background: transparent; }
     .relation-entry:hover { color: var(--accent); background: var(--highlight); }
     .scope { display: block; margin-bottom: 5px; color: var(--accent); font-size: .84rem; overflow-wrap: anywhere; }
@@ -166,7 +180,6 @@
       .nav > details > summary { display: list-item; }
       .nav label { margin-top: 8px; }
       .graph { padding-inline: 18px; }
-      .overview-tree [role="group"] { margin-left: 6px; }
       .guide-status { width: 100%; margin-left: 0; }
     }
   </style>
@@ -187,8 +200,12 @@
   <main class="workspace" id="workspace">
     <section id="overview-panel" aria-labelledby="overview-title" hidden>
       <div class="overview-heading"><h2 id="overview-title">项目功能</h2><p id="overview-count" class="muted"></p></div>
-      <div class="overview-search"><label for="overview-search">筛选功能树</label><input type="search" id="overview-search"></div>
-      <ul class="overview-tree" id="overview-tree" role="tree" aria-labelledby="overview-title"></ul>
+      <div class="overview-search"><label for="overview-search">筛选项目功能</label><input type="search" id="overview-search"></div>
+      <div class="overview-viewport" id="overview-viewport">
+        <div class="overview-map" id="overview-tree" role="tree" aria-labelledby="overview-title">
+          <svg id="overview-wires" aria-hidden="true"></svg>
+        </div>
+      </div>
       <p class="muted" id="overview-empty" role="status" hidden>找不到匹配的分支或步骤</p>
     </section>
     <nav class="nav" id="navigation" aria-label="功能线路" hidden>
@@ -224,10 +241,15 @@
       group, items: group.flows.map(flow => ({ group, flow, key: group.id + '/' + flow.id })),
     }))
     const areas = data.project.areas ?? []
-    const tree = by('overview-tree')
-    const treeLabels = { project: '项目', area: '领域', group: '功能区', flow: '线路', step: '步骤' }
-    const expanded = new Set(['project'])
-    let overviewRoot, treeFocus
+    const overviewMap = by('overview-tree'), overviewViewport = by('overview-viewport')
+    const overviewWires = by('overview-wires'), overviewSearch = by('overview-search')
+    const overviewLabels = { project: '项目', area: '领域', group: '功能区', flow: '线路', step: '步骤' }
+    const overviewSize = { width: 208, height: 56, stepHeight: 44, columnGap: 72, rowGap: 12, padding: 20 }
+    const overviewExpanded = new Set(['project'])
+    const overviewSearchCollapsed = new Set()
+    const overviewCards = new Map()
+    const overviewFocusWires = []
+    let overviewRoot, overviewTerm
     const items = groups.flatMap(group => group.items)
     const itemByKey = new Map(items.map(item => [item.key, item]))
     const connections = new Map(items.map(item => [item.key, { incoming: [], outgoing: [] }]))
@@ -275,8 +297,12 @@
       return result
     }
 
+    function stateOfStep(node) {
+      return node.state ?? (node.sources.length ? 'implemented' : 'planned')
+    }
+
     function stepBadge(node) {
-      const state = node.state ?? (node.sources.length ? 'implemented' : 'planned')
+      const state = stateOfStep(node)
       return make('span', data.stepStateLabels[state], 'step-state ' + state)
     }
 
@@ -377,7 +403,8 @@
         children: items.map(item => ({
           kind: 'flow', key: 'flow/' + item.key, title: item.flow.title, summary: item.flow.summary, item,
           children: item.flow.nodes.map(node => ({
-            kind: 'step', title: node.title, summary: node.summary, item, step: node.id,
+            kind: 'step', key: 'step/' + item.key + '/' + node.id, title: node.title, summary: node.summary,
+            item, node, children: [],
           })),
         })),
       }))
@@ -389,116 +416,211 @@
     }
 
     function filterOverview(entry, term) {
-      const children = entry.children?.map(child => filterOverview(child, term)).filter(Boolean)
-      if (children?.length) return { ...entry, children, searchExpanded: true }
-      return (entry.title + ' ' + (entry.summary ?? '')).toLowerCase().includes(term) ? entry : null
+      const children = entry.children.map(child => filterOverview(child, term)).filter(Boolean)
+      const matched = (entry.title + ' ' + (entry.summary ?? '')).toLowerCase().includes(term)
+      return matched || children.length ? { ...entry, children, matched } : null
     }
 
-    function setTreeFocus(element) {
-      if (treeFocus) {
-        treeFocus.tabIndex = -1
-        const action = treeFocus.firstElementChild.querySelector('.tree-open')
-        if (action) action.tabIndex = -1
-      }
-      treeFocus = element
-      element.tabIndex = 0
-      const action = element.firstElementChild.querySelector('.tree-open')
-      if (action) action.tabIndex = 0
-    }
-
-    function overviewItem(entry, filtering) {
-      const element = make('li')
-      const kind = treeLabels[entry.kind]
-      element.setAttribute('role', 'treeitem')
-      element.setAttribute('aria-label', entry.title + '，' + kind)
-      element.tabIndex = -1
-      const row = make('div', '', 'tree-row')
-      row.dataset.kind = entry.kind
-      const toggle = make('span', '', 'tree-toggle')
-      toggle.setAttribute('aria-hidden', 'true')
-      const label = make('span', '', 'tree-label')
-      row.append(toggle, make('span', kind, 'tree-kind'), label)
-      element.append(row)
-      if (entry.group) row.dataset.reviewGroup = entry.group.id
-      if (entry.kind === 'flow') {
-        const action = button(entry.title, 'tree-open', () => activate('process', entry.item, true))
-        action.setAttribute('aria-label', '打开操作流程：' + entry.title)
-        action.title = '打开操作流程'
-        action.tabIndex = -1
-        const arrow = make('span', ' →')
-        arrow.setAttribute('aria-hidden', 'true')
-        action.append(arrow)
-        label.append(action)
-        element.dataset.overviewFlow = entry.item.key
-      } else {
-        const title = make(entry.step ? 'span' : 'strong', entry.title)
-        if (data.review && entry.step) title.dataset.reviewText = entry.step
-        label.append(title)
-      }
-      if (entry.summary && (entry.kind === 'area' || entry.kind === 'group')) label.append(make('small', entry.summary))
-
-      const branch = entry.children?.length ? make('ul') : null
-      function expand(open) {
-        element.setAttribute('aria-expanded', open)
-        branch.hidden = !open
-        branch.replaceChildren(...(open ? entry.children.map(child => overviewItem(child, filtering)) : []))
-        if (!filtering) {
-          if (open) expanded.add(entry.key)
-          else expanded.delete(entry.key)
+    function layoutOverview(root) {
+      const { width, height, stepHeight, columnGap, rowGap, padding } = overviewSize
+      const nodes = new Map()
+      let right = 0, bottom = 0, nextRow = padding + height / 2
+      function place(entry, depth, parent) {
+        const x = padding + depth * (width + columnGap)
+        const h = entry.kind === 'step' ? stepHeight : height
+        const open = entry.children.length > 0 &&
+          (overviewTerm ? !overviewSearchCollapsed.has(entry.key) : overviewExpanded.has(entry.key))
+        const node = { entry, depth, parent, x, height: h, open }
+        nodes.set(entry.key, node)
+        if (open) {
+          const children = entry.children.map(child => place(child, depth + 1, node))
+          node.center = (children[0].center + children.at(-1).center) / 2
+        } else {
+          node.center = nextRow
+          nextRow += height + rowGap
         }
+        right = Math.max(right, x + width)
+        bottom = Math.max(bottom, node.center + h / 2)
+        return node
       }
-      if (branch) {
-        branch.setAttribute('role', 'group')
-        element.append(branch)
-        expand(filtering ? Boolean(entry.searchExpanded) : expanded.has(entry.key))
-      }
-      function choose() {
-        if (branch) expand(branch.hidden)
-        else if (entry.step) activate('process', entry.item, true, true, entry.step)
-      }
-      row.addEventListener('click', event => {
-        if (event.target.closest('.tree-open')) return
-        const selection = window.getSelection()
-        if (entry.step && selection?.toString() && row.contains(selection.anchorNode)) return
-        element.focus()
-        choose()
-      })
-      element.addEventListener('keydown', event => {
-        if (event.target !== element) return
-        const key = event.key
-        if (key === 'Enter' || key === ' ') choose()
-        else if (key === 'ArrowRight') {
-          if (branch?.hidden) expand(true)
-          else branch?.firstElementChild?.focus()
-        } else if (key === 'ArrowLeft') {
-          if (branch && !branch.hidden) expand(false)
-          else element.parentElement.closest('[role="treeitem"]')?.focus()
-        } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(key)) {
-          const visible = [...tree.querySelectorAll('[role="treeitem"]')]
-          const index = visible.indexOf(element)
-          const next = { ArrowDown: index + 1, ArrowUp: index - 1, Home: 0, End: visible.length - 1 }[key]
-          visible[next]?.focus()
-        } else return
-        event.preventDefault()
-      })
-      return element
+      const project = place(root, 0)
+      return { nodes, project, width: right + padding, height: bottom + padding }
     }
 
-    function renderOverview() {
+    function toggleOverview(key, wasOpen) {
+      const changes = overviewTerm ? overviewSearchCollapsed : overviewExpanded
+      if (overviewTerm ? wasOpen : !wasOpen) changes.add(key)
+      else changes.delete(key)
+      renderOverview()
+    }
+
+    function createOverviewCard(entry, parent) {
+      const position = make('div', '', 'overview-position')
+      position.setAttribute('role', 'treeitem')
+      position.dataset.overviewKey = entry.key
+      position.dataset.kind = entry.kind
+      const isFlow = entry.kind === 'flow'
+      const kind = overviewLabels[entry.kind]
+      const label = make('span', '', 'overview-label')
+      const title = make('strong', entry.title)
+      const card = button('', 'overview-card', event => {
+        if (isFlow) activate('process', entry.item, true)
+        else if (entry.node) {
+          const selection = window.getSelection()
+          if (event.detail > 0 && selection && !selection.isCollapsed && title.contains(selection.anchorNode)) return
+          activate('process', entry.item, true, true, entry.node.id)
+        } else {
+          const open = card.getAttribute('aria-expanded')
+          if (open !== null) toggleOverview(entry.key, open === 'true')
+        }
+      })
+      card.dataset.kind = entry.kind
+      card.setAttribute('aria-label', entry.title + '，' + (isFlow ? '打开操作流程' : kind))
+      card.title = entry.title + (entry.summary ? '\n' + entry.summary : '')
+      if (entry.group) card.dataset.reviewGroup = entry.group.id
+      if (entry.item) card.dataset.overviewFlow = entry.item.key
+      if (entry.node) {
+        const state = stateOfStep(entry.node)
+        const dot = make('span', '', 'overview-state ' + state)
+        dot.title = data.stepStateLabels[state]
+        dot.setAttribute('aria-hidden', 'true')
+        card.title = entry.title + ' · ' + dot.title
+        card.append(dot)
+        if (data.review) title.dataset.reviewText = entry.node.id
+      } else {
+        label.append(make('span', kind, 'overview-kind'))
+      }
+      label.append(title)
+      card.append(label)
+      position.append(card)
+
+      let control = card, count
+      if (isFlow) {
+        control = button('', 'overview-expander overview-flow-toggle', () =>
+          toggleOverview(entry.key, control.getAttribute('aria-expanded') === 'true'))
+        control.setAttribute('aria-label', entry.title + ' 的步骤')
+        control.title = '展开或收起步骤'
+        count = make('span')
+        control.append(count)
+        position.append(control)
+      } else if (!entry.node) {
+        count = make('span', '', 'overview-expander')
+        count.setAttribute('aria-hidden', 'true')
+        card.append(count)
+      }
+
+      let wire
+      if (parent) {
+        wire = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+        wire.setAttribute('class', 'overview-wire')
+        overviewWires.append(wire)
+      }
+      return { position, card, control, count, wire }
+    }
+
+    function updateOverviewCard(record, node) {
+      const { entry, x, height, center, depth, parent, open } = node
+      const { position, card, control, count, wire } = record
+      const { width, columnGap } = overviewSize
+      record.node = node
+      position.style.left = x + 'px'
+      position.style.top = center - height / 2 + 'px'
+      position.style.width = width + 'px'
+      position.style.height = height + 'px'
+      position.setAttribute('aria-level', depth + 1)
+      card.toggleAttribute('data-match', Boolean(entry.matched))
+      const branch = entry.children.length > 0
+      for (const element of [position, control]) {
+        if (branch) element.setAttribute('aria-expanded', open)
+        else element.removeAttribute('aria-expanded')
+      }
+      if (count) {
+        count.textContent = String(entry.children.length)
+        if (control === card) count.hidden = !branch
+        else control.hidden = !branch
+      }
+      if (wire) {
+        const start = parent.x + width, bend = start + columnGap / 2
+        const curve = `M${start} ${parent.center} C${bend} ${parent.center} ${bend} ${center} ${x} ${center}`
+        wire.setAttribute('d', curve)
+        wire.style.d = 'path("' + curve + '")'
+        wire.classList.toggle('expanded', open)
+      }
+    }
+
+    function focusOverviewWires(target) {
+      for (const wire of overviewFocusWires) wire.classList.remove('focused')
+      overviewFocusWires.length = 0
+      let key = target?.closest('[data-overview-key]')?.dataset.overviewKey
+      while (key) {
+        const record = overviewCards.get(key)
+        if (!record?.wire) break
+        record.wire.classList.add('focused')
+        overviewFocusWires.push(record.wire)
+        key = record.node.parent.entry.key
+      }
+    }
+
+    function renderOverview(resetScroll = false) {
       overviewRoot ??= overviewEntries()
-      const term = by('overview-search').value.trim().toLowerCase()
-      const root = term ? filterOverview(overviewRoot, term) : overviewRoot
+      overviewTerm = overviewSearch.value.trim().toLowerCase()
+      if (resetScroll) overviewSearchCollapsed.clear()
+      const root = overviewTerm ? filterOverview(overviewRoot, overviewTerm) : overviewRoot
       by('overview-count').textContent = (areas.length ? areas.length + ' 个领域 · ' : '') +
         groups.length + ' 个功能区 · ' + items.length + ' 条线路'
       by('overview-empty').hidden = Boolean(root)
-      tree.hidden = !root
-      tree.replaceChildren()
-      treeFocus = null
-      if (root) {
-        const element = overviewItem(root, Boolean(term))
-        tree.append(element)
-        setTreeFocus(element)
+      overviewViewport.hidden = !root
+      const layout = root && layoutOverview(root)
+      for (const [key, record] of overviewCards) {
+        if (layout?.nodes.has(key)) continue
+        record.position.remove()
+        record.wire?.remove()
+        overviewCards.delete(key)
       }
+      if (!layout) {
+        focusOverviewWires(null)
+        return
+      }
+      overviewMap.style.width = layout.width + 'px'
+      overviewMap.style.height = layout.height + 'px'
+      // Keep the existing cards in place in the DOM so focus and position transitions survive.
+      let next = overviewWires.nextElementSibling
+      for (const [key, node] of layout.nodes) {
+        let record = overviewCards.get(key)
+        if (!record) {
+          record = createOverviewCard(node.entry, node.parent)
+          overviewCards.set(key, record)
+          overviewMap.insertBefore(record.position, next)
+        } else {
+          next = next.nextElementSibling
+        }
+        updateOverviewCard(record, node)
+      }
+      focusOverviewWires(document.activeElement)
+      if (resetScroll) {
+        overviewViewport.scrollLeft = 0
+        overviewViewport.scrollTop = Math.max(0, layout.project.center - overviewViewport.clientHeight / 2)
+      }
+    }
+
+    function navigateOverview(event) {
+      const key = event.target.closest('[data-overview-key]')?.dataset.overviewKey
+      const node = overviewCards.get(key)?.node
+      if (!node) return
+      const { entry, parent, open } = node
+      if (event.key === 'ArrowRight') {
+        if (open) overviewCards.get(entry.children[0].key)?.card.focus()
+        else if (entry.children.length) toggleOverview(key, false)
+      } else if (event.key === 'ArrowLeft') {
+        if (open) toggleOverview(key, true)
+        else if (parent) overviewCards.get(parent.entry.key)?.card.focus()
+      } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+        const cards = [...overviewMap.querySelectorAll('.overview-card')]
+        const index = cards.indexOf(overviewCards.get(key).card)
+        const next = { ArrowDown: index + 1, ArrowUp: index - 1, Home: 0, End: cards.length - 1 }[event.key]
+        cards[next]?.focus()
+      } else return
+      event.preventDefault()
     }
 
     function canvasLayer(canvas) {
@@ -828,6 +950,7 @@
       hideTooltip()
       by('workspace').dataset.view = document.body.dataset.view = mode
       by('overview-panel').hidden = mode !== 'overview'
+      if (mode === 'overview' && !overviewRoot) renderOverview(true)
       by('process-panel').hidden = detail.hidden = mode !== 'process'
       by('relations-panel').hidden = mode !== 'relations'
       by('navigation').hidden = mode === 'overview'
@@ -862,12 +985,10 @@
       else activate('overview', current, false, false)
     }
 
-    renderOverview()
-    by('overview-search').addEventListener('input', renderOverview)
-    tree.addEventListener('focusin', event => {
-      const element = event.target.closest('[role="treeitem"]')
-      if (element) setTreeFocus(element)
-    })
+    overviewSearch.addEventListener('input', () => renderOverview(true))
+    overviewMap.addEventListener('focusin', event => focusOverviewWires(event.target))
+    overviewMap.addEventListener('focusout', event => focusOverviewWires(event.relatedTarget))
+    overviewMap.addEventListener('keydown', navigateOverview)
     for (const control of viewButtons) {
       control.addEventListener('click', () => activate(control.dataset.view, current))
     }
