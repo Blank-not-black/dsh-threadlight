@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -279,6 +279,16 @@ test('workspace capture includes authentication code and supported languages whi
   for (const path of snapshot.files.keys()) await rm(join(root, path))
   await assert.rejects(refreshDocumentation(root, { runSession: async () => assert.fail('No model session needed') }),
     /No inspectable source files/)
+})
+
+test('workspace capture resolves a linked root before comparing candidate paths', async t => {
+  const { root } = await fixture(t)
+  const outer = await mkdtemp(join(tmpdir(), 'threadlight-link-'))
+  t.after(() => rm(outer, { recursive: true, force: true }))
+  const linked = join(outer, 'linked-repo')
+  await symlink(root, linked, process.platform === 'win32' ? 'junction' : 'dir')
+  const snapshot = await captureWorkspace(linked)
+  assert.deepEqual([...snapshot.files.keys()].sort(), ['src/download.js', 'src/upload.js'])
 })
 
 test('refresh ties a step to the current source and documentation and publishes stable links', async t => {
