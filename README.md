@@ -1,5 +1,7 @@
 # dsh-threadlight
 
+[![check](https://github.com/Blank-not-black/dsh-threadlight/actions/workflows/check.yml/badge.svg)](https://github.com/Blank-not-black/dsh-threadlight/actions/workflows/check.yml)
+
 Threadlight 通过独立的 DeepSeek Harness 文档会话，把项目功能梳理为可浏览的线路。从功能总览进入一条线路，可以看操作顺序、分支和源码证据，也可以切到功能关系查看它与其他线路的接续和使用关系。图谱和 Markdown 由同一份结构化数据生成。
 
 ## 跑一遍
