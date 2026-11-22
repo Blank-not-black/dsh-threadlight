@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
+import { setImmediate } from 'node:timers/promises'
 import { runInNewContext } from 'node:vm'
 import { parseGraph } from '../lib/graph.mjs'
 import { renderReader } from '../lib/reader.mjs'
@@ -24,7 +25,8 @@ function graphWithAreas() {
 }
 
 // Run the shipped scripts with the DOM operations needed by the overview and review menu.
-function loadOverview(graph, { review = false, clientHeight = 320 } = {}) {
+function loadOverview(graph, { review = false, clientHeight = 320, reply = () => ({ answer: 'test' }),
+  confirm = () => true } = {}) {
   const page = renderReader(graph, review ? { review: { workspace: 'test', digest: 'test', nonce: 'test' } } : {})
   let reviewCurrent, selection
   class Element {
@@ -134,6 +136,7 @@ function loadOverview(graph, { review = false, clientHeight = 320 } = {}) {
       if (!event.defaultPrevented && this.tagName === 'button' && (key === 'Enter' || key === ' ')) this.dispatch('click')
     }
     showModal() { this.open = true }
+    close() { this.open = false; this.dispatch('close') }
   }
 
   const document = new Element('#document')
@@ -178,9 +181,11 @@ function loadOverview(graph, { review = false, clientHeight = 320 } = {}) {
     document, window, Element, Node: { ELEMENT_NODE: 1 }, location, processRoutes, captureReview,
     history: { pushState(_state, _title, hash) { location.hash = hash } },
     fetch(url, options) {
-      reviewRequests.push([url, JSON.parse(options.body)])
-      return Promise.resolve({ ok: true, json: async () => ({ answer: 'test' }) })
+      const call = [url, JSON.parse(options.body ?? 'null'), options.method]
+      reviewRequests.push(call)
+      return Promise.resolve({ ok: true, json: async () => reply(...call) })
     },
+    confirm,
     innerWidth: 800, innerHeight: 600, clearTimeout, AbortController, URLSearchParams,
     ResizeObserver: class { observe() {} },
     matchMedia: () => ({ matches: false, addEventListener() {} }),
@@ -196,8 +201,11 @@ function loadOverview(graph, { review = false, clientHeight = 320 } = {}) {
   }
   return { by, visible, cards, kinds, wires, filter, focused: () => document.activeElement, location, processRoutes,
     reviewCurrent, reviewRequests, reviewMenu: () => document.querySelector('.review-menu'),
+    reviewDialog: () => document.querySelector('.review-dialog'),
     goToOverview() { location.hash = '#overview'; windowEvents.get('hashchange')() },
-    select(element) { selection = { isCollapsed: false, anchorNode: element, focusNode: element, toString: () => element.textContent } },
+    select(element, text = element.textContent) {
+      selection = { isCollapsed: false, anchorNode: element, focusNode: element, toString: () => text }
+    },
   }
 }
 
@@ -327,13 +335,17 @@ test('search expands the path to matches, highlights direct hits and restores ma
 })
 
 test('DSH review finds the module and resolves a selected step to its own flow', () => {
-  const { cards, filter, location, reviewCurrent, reviewMenu, reviewRequests, select } =
-    loadOverview(graphWithAreas(), { review: true })
+  const graph = graphWithAreas()
+  const { cards, filter, location, reviewCurrent, reviewMenu, reviewRequests, select } = loadOverview(graph, { review: true })
+  const page = renderReader(graph, { review: { workspace: 'test', digest: 'test', nonce: 'test' } })
+  assert.match(page, /card\.dataset\.reviewStep = title\.dataset\.reviewText = summary\.dataset\.reviewText = id/)
   filter('示例筛选词')
   const [, , group, flow, step] = cards()
   const title = step.querySelector('[data-review-text]')
   assert.equal(group.dataset.reviewGroup, 'export')
   assert.equal(flow.dataset.overviewFlow, 'export/sample')
+  assert.equal(flow.querySelector('[data-review-text]').dataset.reviewText, '')
+  assert.equal(step.dataset.reviewStep, 'validate')
   assert.equal(title.dataset.reviewText, 'validate')
   assert.equal(reviewCurrent().flow.id, 'obsidian')
   assert.equal(reviewCurrent(flow).flow.id, 'sample')
@@ -341,16 +353,93 @@ test('DSH review finds the module and resolves a selected step to its own flow',
 
   group.querySelector('strong').dispatch('contextmenu')
   assert.equal(reviewMenu().firstElementChild.textContent, '模块批注')
+  step.dispatch('contextmenu')
+  assert.equal(reviewMenu().firstElementChild.textContent, '批注这一步')
+  flow.dispatch('contextmenu')
+  assert.equal(reviewMenu().firstElementChild.textContent, '线路批注')
   select(title)
   title.dispatch('contextmenu')
-  assert.equal(reviewMenu().firstElementChild.textContent, '询问含义')
+  assert.deepEqual(reviewMenu().children.map(button => button.textContent), ['询问含义', '进一步讲解', '批注所选文字'])
   reviewMenu().firstElementChild.click()
   assert.deepEqual(reviewRequests, [['api/explain', { workspace: 'test', digest: 'test',
-    group: 'export', flow: 'sample', step: 'validate', text: '示例 validate', mode: 'meaning' }]])
+    group: 'export', flow: 'sample', step: 'validate', text: '示例 validate', mode: 'meaning' }, 'POST']])
   step.click()
   assert.equal(location.hash, '#overview')
   step.press('Enter')
   assert.equal(location.hash, '#step/export/sample/validate')
+})
+
+test('review dialog scopes annotations and saves, edits, and deletes a quoted note', async () => {
+  const quote = '  选中文字\n保留空白  '
+  const target = { kind: 'step', flow: 'sample', step: 'validate' }
+  const stamp = '2026-01-01T00:00:00.000Z'
+  const old = { id: 'module-note', target: { kind: 'group' }, text: '旧模块批注', createdAt: stamp }
+  const previous = { id: 'step-note', target, text: '原有批注', createdAt: stamp }
+  let confirmed = false
+  const { cards, filter, reviewMenu, reviewDialog, reviewRequests, select } = loadOverview(graphWithAreas(), {
+    review: true,
+    confirm: () => confirmed,
+    reply(_url, body, method) {
+      if (method === 'GET') return { notes: [old, previous] }
+      if (method === 'POST') return { note: { ...body, id: 'new-note', createdAt: stamp } }
+      if (method === 'PATCH') return { note: { ...body, id: 'new-note', target, quote, createdAt: stamp, updatedAt: stamp } }
+      return { deleted: true }
+    },
+  })
+  filter('示例筛选词')
+  const [, , group, flow, step] = cards()
+  const title = step.querySelector('[data-review-text]')
+  select(title, quote)
+  title.dispatch('contextmenu')
+  reviewMenu().children[2].click()
+  await setImmediate()
+  const dialog = reviewDialog()
+  const click = (container, label) => container.querySelectorAll('button').find(button => button.textContent === label).click()
+  const { children: rows } = dialog.querySelector('.review-notes')
+  const add = dialog.querySelector('textarea')
+  assert.equal(dialog.querySelector('h2').textContent, '步骤批注 · 示例 validate')
+  assert.equal(dialog.querySelector('blockquote').textContent, quote)
+  assert.deepEqual(rows.map(row => row.querySelector('p').textContent), ['原有批注'])
+
+  const common = { workspace: 'test', digest: 'test', group: 'export' }
+  add.value = '新增批注'
+  click(dialog, '保存批注')
+  await setImmediate()
+  assert.deepEqual(reviewRequests.at(-1), ['api/annotations', { ...common, target, quote, text: '新增批注' }, 'POST'])
+  assert.equal(rows[0].querySelector('blockquote').textContent, quote)
+  click(rows[0], '修改')
+  const edit = rows[0].querySelector('textarea')
+  assert.equal(edit.value, '新增批注')
+  edit.value = '修改后的正文'
+  click(rows[0], '保存修改')
+  await setImmediate()
+  assert.deepEqual(reviewRequests.at(-1), ['api/annotations', { ...common, id: 'new-note', text: '修改后的正文' }, 'PATCH'])
+  assert.equal(rows[0].querySelector('p').textContent, '修改后的正文')
+  assert.match(rows[0].querySelector('time').textContent, /^修改于 /)
+  click(rows[0], '删除')
+  assert.equal(reviewRequests.at(-1)[2], 'PATCH')
+  confirmed = true
+  click(rows[0], '删除')
+  await setImmediate()
+  assert.deepEqual(reviewRequests.at(-1), ['api/annotations', { ...common, id: 'new-note' }, 'DELETE'])
+  assert.deepEqual(rows.map(row => row.querySelector('p').textContent), ['原有批注'])
+
+  dialog.close()
+  group.dispatch('contextmenu')
+  click(reviewMenu(), '模块批注')
+  await setImmediate()
+  assert.equal(dialog.querySelector('h2').textContent, '模块批注 · 导出项目图谱')
+  assert.equal(dialog.querySelector('.review-notes').querySelector('p').textContent, '旧模块批注')
+
+  dialog.close()
+  const flowTitle = flow.querySelector('[data-review-text]')
+  select(flowTitle)
+  flowTitle.dispatch('contextmenu')
+  click(reviewMenu(), '批注所选文字')
+  await setImmediate()
+  assert.equal(dialog.querySelector('h2').textContent, '线路批注 · 另一条线路')
+  assert.equal(dialog.querySelector('blockquote').textContent, '另一条线路')
+  assert.equal(dialog.querySelector('.review-notes').children.length, 0)
 })
 
 test('relation wires are an overlay instead of a third grid cell', () => {

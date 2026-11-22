@@ -51,11 +51,21 @@ refresh 为带行号的证据写入 anchor。lineHash 是引用行的 SHA-256，
 
 只有 state 为 verified 时才可填写 verification，且至少有一项 passed。仅有失败结果时可在 divergence 中说明实际情况。文档会话省略这三个宿主管理字段。合并文档会话结果时，沿用同一 group、flow、node ID 时保留原字段。
 
+## 查看器批注
+
+DSH 查看器将批注保存在 `.threadlight/annotations/<功能区 ID>/<UUID>.json`。记录包含 id、text、createdAt、module、graph、target 和可选的 quote。module 为功能区 ID，graph 为创建批注时的图谱 SHA-256。修改正文时补写 ISO-8601 格式的 updatedAt，保留原引用、归属和创建时间。
+
+target 的 kind 可取 group、flow 或 step。group 以 module 为目标，flow 还需指定该模块下的 flow ID，step 另需指定该线路下的 step ID。没有 target 的旧记录按 `{ "kind": "group" }` 读取。text 为 1 至 3000 字符的正文。可选的 quote 最长 3000 字符，保留选文的空白与换行。
+
+`GET /threadlight/api/annotations` 返回指定模块的批注列表。`POST` 新建并返回 `{ note }`，`PATCH` 按 id 修改正文并返回 `{ note }`，`DELETE` 按 id 删除文件并返回 `{ deleted: true }`。请求需提供 workspace、group 和当前 digest，写请求沿用审阅页的同源校验。目标无效返回 400，找不到待修改或删除的批注返回 404，图谱已更新返回 409。
+
 ## 流程草稿
 
 DSH Web 将流程草稿保存在工作区的 `.threadlight/drafts/<草稿 ID>/<版本>.json`。草稿有独立的 schemaVersion 1，记录 id、version、时间、plan 和可选的 base。复制已有线路时，base 记录原图谱摘要、线路标识、原始流程和证据。保存按版本追加，既有实现图谱继续作为阅读和导出的依据。
 
-plan 包含线路名称、目标与范围、验收条件、步骤、连线和批注。步骤和连线保留稳定 ID。批注可指向一步或一条连线，也可针对整条线路。连线允许在编辑时留空条件，提交时每条 branch 需有明确条件。提示词包含完整的目标流程、与原线路相比的修改、选中的批注原话和基线证据。
+plan 包含线路名称、目标与范围、验收条件、步骤、连线和批注。步骤和连线保留稳定 ID。批注可指向一步或一条连线，也可针对整条线路。提交时只要求填写线路名称，目标与范围、验收条件、步骤名称、步骤说明和分支条件都可留空。连线仍需使用有效步骤端点。提示词明确标记留空字段，包含随任务提交的批注原话，并在有基线时附上证据及适用的流程差异。
+
+提交需要至少一个步骤。没有步骤时，只要至少有一条标记为「随任务提交」的线路批注，就可以提交。提示词将任务标记为用户反馈，并使用一个「用户反馈」步骤承载批注。该步骤只出现在提示词中，无需为它生成步骤实现报告。
 
 草稿可用 plan.layout 保存手动放置的步骤位置，每项包含 step、x 和 y。连线可用 waypoints 保存有序的折线控制点，每条线最多 64 个。坐标使用画布单位，范围为 −100000 到 100000。旧草稿中的 bend 仍可读取，按原有横向比例和两端之间的相对高度映射为控制点。实现提示词与行为差异使用步骤内容、连线端点、类型和条件。
 

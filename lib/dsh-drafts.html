@@ -43,7 +43,8 @@
         <h2 id="plan-title">线路与验收</h2>
         <p class="muted" id="base" hidden></p>
         <div class="plan-fields">
-          <label>线路名称 <input id="flow-title" maxlength="160" placeholder="例如上传文件"></label>
+          <label>线路名称 <input id="flow-title" maxlength="160" placeholder="例如上传文件" aria-describedby="submit-hint"></label>
+          <p class="muted" id="submit-hint">名称必填，其余可后补</p>
           <label>目标与范围 <textarea id="flow-summary" maxlength="6000" rows="3" placeholder="用户要完成什么"></textarea></label>
           <label>验收条件 <textarea id="acceptance" maxlength="6000" rows="3" placeholder="怎样操作，看到什么结果就算完成"></textarea></label>
         </div>

@@ -25,6 +25,8 @@
 }
 .review-status { margin-top: 10px; color: var(--quiet); }
 .review-notes { list-style: none; padding: 0; }
+.review-notes:empty { display: none; }
 .review-notes li + li { border-top: 1px solid var(--line); margin-top: 8px; padding-top: 8px; }
 .review-notes time { color: var(--quiet); font-size: .8rem; }
+.review-note-actions { display: flex; gap: 6px; margin-top: 5px; }
 .review-answer, .review-dialog blockquote, .review-notes p { white-space: pre-wrap; overflow-wrap: anywhere; }

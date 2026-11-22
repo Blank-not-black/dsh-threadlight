@@ -161,8 +161,8 @@ test('installed DSH serves the reviewer, exports notes and accepts a flow draft 
   assert.ok(renderedDoc.includes('id="' + flow.id + '--' + flow.nodes[0].id + '"'))
   assert.ok(renderedDoc.includes('#step/' + group.id + '/' + flow.id + '/' + flow.nodes[0].id))
   const selection = { ...data.review, group: group.id, flow: flow.id, step: null, text: '节点编号' }
-  const post = (route, body, headers = {}) => fetch(new URL('threadlight/api/' + route, result.base), {
-    method: 'POST',
+  const post = (route, body, headers = {}, method = 'POST') => fetch(new URL('threadlight/api/' + route, result.base), {
+    method,
     headers: { cookie, 'content-type': 'application/json', 'x-threadlight-client': 'review', ...headers },
     body: JSON.stringify(body),
   })
@@ -227,9 +227,61 @@ test('installed DSH serves the reviewer, exports notes and accepts a flow draft 
   assert.equal(saved.status, 201)
   const savedNote = (await saved.json()).note
   assert.equal(savedNote.text, 'safe note')
-  assert.match(await readFile(join(workspace, '.threadlight/annotations', group.id, savedNote.id + '.json'), 'utf8'), /safe note/)
-  const notes = await fetch(new URL('threadlight/api/annotations?' + new URLSearchParams(selection), result.base), { headers: { cookie } })
-  assert.deepEqual((await notes.json()).notes, [savedNote])
+  assert.deepEqual(savedNote.target, { kind: 'group' })
+  const annotationFolder = join(control, 'annotations', group.id)
+  const noteFile = id => join(annotationFolder, id + '.json')
+  const { target: _target, ...legacy } = JSON.parse(await readFile(noteFile(savedNote.id), 'utf8'))
+  await writeFile(noteFile(savedNote.id), JSON.stringify(legacy), 'utf8')
+  const { workspace: reviewWorkspace, digest } = data.review
+  const noteScope = { workspace: reviewWorkspace, digest, group: group.id }
+  const getNotes = async () => {
+    const url = new URL('threadlight/api/annotations?' + new URLSearchParams(noteScope), result.base)
+    const response = await fetch(url, { headers: { cookie } })
+    assert.equal(response.status, 200)
+    return (await response.json()).notes
+  }
+  assert.deepEqual(await getNotes(), [savedNote])
+  const target = { kind: 'step', flow: flow.id, step: flow.nodes[0].id }
+  const quote = '  节点编号\r\n\t保留   空白  '
+  const noteBody = { ...noteScope, text: '核对这里', target, quote }
+  for (const target of [null, { kind: 'unknown' }, { kind: 'flow', flow: 'missing' }, { kind: 'step', flow: flow.id, step: 'missing' }]) {
+    assert.equal((await post('annotations', { ...noteBody, target })).status, 400)
+  }
+  assert.equal((await post('annotations', { ...noteBody, quote: '字'.repeat(3001) })).status, 400)
+  assert.equal((await post('annotations', { ...noteBody, group: '../annotations' })).status, 400)
+  assert.equal((await post('annotations', { ...noteBody, digest: 'stale' })).status, 409)
+  const flowTarget = { kind: 'flow', flow: flow.id }
+  const maxQuote = '\t'.repeat(3000)
+  const flowReply = await post('annotations', { ...noteBody, target: flowTarget, text: '字'.repeat(3000), quote: maxQuote })
+  assert.equal(flowReply.status, 201, await flowReply.clone().text())
+  const { note: flowNote } = await flowReply.json()
+  assert.deepEqual(flowNote.target, flowTarget)
+  assert.equal(flowNote.quote, maxQuote)
+  const stepReply = await post('annotations', noteBody)
+  assert.equal(stepReply.status, 201, await stepReply.clone().text())
+  const { note: stepNote } = await stepReply.json()
+  assert.deepEqual(stepNote.target, target)
+  assert.equal(stepNote.quote, quote)
+  assert.deepEqual(JSON.parse(await readFile(noteFile(stepNote.id), 'utf8')), { ...stepNote, module: group.id, graph: digest })
+  const mutate = (method, fields, headers = {}) => post('annotations', { ...noteScope, id: stepNote.id, ...fields }, headers, method)
+  for (const method of ['PATCH', 'DELETE']) {
+    assert.equal((await mutate(method, {}, { 'x-threadlight-client': 'other' })).status, 403)
+    assert.equal((await mutate(method, { digest: 'stale' })).status, 409)
+    assert.equal((await mutate(method, { id: '../outside' })).status, 400)
+    assert.equal((await mutate(method, { id: randomUUID(), text: '不存在' })).status, 404)
+  }
+  const edited = await mutate('PATCH', { text: '修改后的批注', target: { kind: 'group' }, quote: '不得覆盖' })
+  assert.equal(edited.status, 200, await edited.clone().text())
+  const { note: updated } = await edited.json()
+  assert.ok(Number.isFinite(Date.parse(updated.updatedAt)))
+  assert.deepEqual(updated, { ...stepNote, text: '修改后的批注', updatedAt: updated.updatedAt })
+  assert.deepEqual(JSON.parse(await readFile(noteFile(stepNote.id), 'utf8')), { ...updated, module: group.id, graph: digest })
+  assert.deepEqual(new Map((await getNotes()).map(note => [note.id, note])), new Map([savedNote, updated, flowNote].map(note => [note.id, note])))
+  assert.deepEqual(await (await mutate('DELETE')).json(), { deleted: true })
+  await assert.rejects(readFile(noteFile(stepNote.id)), { code: 'ENOENT' })
+  assert.equal((await mutate('PATCH', { text: '不得重建' })).status, 404)
+  assert.equal((await mutate('DELETE')).status, 404)
+  assert.equal((await getNotes()).length, 2)
   assert.equal((await post('explain', { ...selection, digest: 'stale', mode: 'meaning' })).status, 409)
   assert.equal((await post('explain', { ...selection, text: 'invalid selection', mode: 'meaning' })).status, 400)
   for (const [mode, answer] of [['meaning', 'Plain explanation'], ['deeper', 'Further explanation']]) {
@@ -257,10 +309,10 @@ test('installed DSH serves the reviewer, exports notes and accepts a flow draft 
   assert.deepEqual(await getDrafts({ workspace: result.empty }), { drafts: [] })
   const id = randomUUID()
   const plan = {
-    title: '上传文件', summary: '允许用户在网络恢复后重试上传。', acceptance: '上传失败后可以直接用原文件重试。',
+    title: '上传文件', summary: '', acceptance: '',
     nodes: [
-      { id: 'upload', title: '开始上传', summary: '用户确认选择并开始上传。' },
-      { id: 'retry', title: '显示重试', summary: '用户可用原文件重试。' },
+      { id: 'upload', title: '', summary: '' },
+      { id: 'retry', title: '显示重试', summary: '' },
     ],
     edges: [{ id: 'offline', from: 'upload', to: 'retry', kind: 'branch', label: '上传期间断网',
       waypoints: [{ x: 240, y: 105 }] }],
@@ -277,11 +329,11 @@ test('installed DSH serves the reviewer, exports notes and accepts a flow draft 
   assert.equal(firstDraft.status, 200, await firstDraft.clone().text())
   assert.equal((await firstDraft.json()).draft.version, 1)
   await assert.rejects(readFile(join(emptyWorkspace, '.threadlight/graph.json')), { code: 'ENOENT' })
-  const incomplete = { ...plan, edges: [{ ...plan.edges[0], label: '' }] }
+  const incomplete = { ...plan, title: '' }
   assert.equal((await post('drafts', { ...packet, version: 1, plan: incomplete })).status, 200)
   const invalid = await post('draft-submit', { workspace: result.empty, id, version: 2 })
   assert.equal(invalid.status, 400)
-  assert.match((await invalid.json()).error, /触发条件/)
+  assert.match((await invalid.json()).error, /名称必填/)
   assert.equal((await post('drafts', { ...packet, version: 1 })).status, 409)
   assert.equal((await post('drafts', { ...packet, version: 2 })).status, 200)
   assert.equal((await getDrafts({ workspace: result.empty })).drafts[0].version, 3)
@@ -308,9 +360,26 @@ test('installed DSH serves the reviewer, exports notes and accepts a flow draft 
   assert.ok(details.includes(JSON.stringify(join(emptyWorkspace, '.threadlight', 'implementation', id, '3.json')).slice(1, -1)))
   assert.match(details, /只记录真正执行过的验证/)
   assert.match(details, /上传期间断网/)
+  assert.match(details, /用户未填写/)
+  assert.match(details, /未命名步骤/)
   assert.match(details, /保留已选文件和预览内容。/)
   assert.doesNotMatch(details, /未选中的备忘/)
   assert.doesNotMatch(details, /waypoints|layout/)
+
+  const feedbackId = randomUUID()
+  const feedbackPlan = { title: '上传体验反馈', summary: '', acceptance: '', nodes: [], edges: [], notes: [
+    { id: 'feedback', step: null, edge: null, selected: true, text: '断网后请保留原文件和预览。' },
+  ] }
+  assert.equal((await post('drafts', { workspace: result.empty, id: feedbackId, version: 0, plan: feedbackPlan })).status, 200)
+  const feedbackReply = await post('draft-submit', { workspace: result.empty, id: feedbackId, version: 1 })
+  assert.equal(feedbackReply.status, 200, await feedbackReply.clone().text())
+  const { submission: feedbackSubmission } = await feedbackReply.json()
+  const feedbackSession = await fetch(new URL('threadlight-fixture-session?id=' + feedbackSubmission.sessionId, result.base), { headers: { cookie } })
+  const feedbackDetails = JSON.stringify((await feedbackSession.json()).prompts)
+  assert.match(feedbackDetails, /用户仅提交了批注，未提供完整流程/)
+  assert.match(feedbackDetails, /断网后请保留原文件和预览。/)
+  assert.doesNotMatch(feedbackDetails, /实现报告/)
+  assert.deepEqual((await getDrafts({ workspace: result.empty, id: feedbackId })).draft.plan, feedbackPlan)
 
   const copyUrl = new URL('threadlight/?' + new URLSearchParams({ workspace: result.ws, drafts: '1', group: group.id, flow: flow.id }), result.base)
   const copyHtml = await (await fetch(copyUrl, { headers: { cookie } })).text()

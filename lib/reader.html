@@ -487,9 +487,10 @@
         dot.setAttribute('aria-hidden', 'true')
         card.title = entry.title + ' · ' + dot.title
         card.append(dot)
-        if (data.review) title.dataset.reviewText = entry.node.id
+        if (data.review) card.dataset.reviewStep = title.dataset.reviewText = entry.node.id
       } else {
         label.append(make('span', kind, 'overview-kind'))
+        if (data.review && isFlow) title.dataset.reviewText = ''
       }
       label.append(title)
       card.append(label)
@@ -932,7 +933,7 @@
           const conditions = flow.edges.filter(edge => edge.to === id && edge.kind === 'branch' && edge.label)
           if (conditions.length === 1) card.append(make('span', conditions[0].label, 'condition'))
           const title = make('strong', node.title), summary = make('span', node.summary)
-          if (data.review) title.dataset.reviewText = summary.dataset.reviewText = id
+          if (data.review) card.dataset.reviewStep = title.dataset.reviewText = summary.dataset.reviewText = id
           card.append(title, summary, stepBadge(node))
           cards.set(id, card)
           lane.append(card)
