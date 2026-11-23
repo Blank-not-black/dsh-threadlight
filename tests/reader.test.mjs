@@ -257,6 +257,42 @@ function loadOverview(graph, { review = false, clientHeight = 320, reply = () =>
   }
 }
 
+// Run the shipped annotation inbox script against the fake DOM and record the
+// host calls it makes. `handle` can override a response (for example a failure).
+async function openNotesInbox(notes, { confirm: confirmAnswer = () => true, handle } = {}) {
+  const { by, document } = loadOverview(graphWithAreas())
+  by('notes-context').textContent = JSON.stringify({ workspace: 'inbox', digest: 'current', project: '示例', maxSelection: 100 })
+  const stamp = '2026-11-23T08:00:00.000Z'
+  const calls = []
+  const stored = new Map(notes.map(note => [note.id, { ...note }]))
+  runInNewContext(notesScript, {
+    document, URLSearchParams, confirm: confirmAnswer,
+    async fetch(url, options) {
+      if (url.startsWith('api/agent-presets')) return { ok: true, json: async () => ({ unavailable: true }) }
+      const method = options.method ?? 'GET'
+      const body = options.body ? JSON.parse(options.body) : null
+      calls.push([url, method, body, options.headers])
+      const custom = handle ? await handle({ url, method, body, stored }) : null
+      if (custom) return custom
+      if (method === 'GET') return { ok: true, json: async () => ({ notes: [...stored.values()] }) }
+      if (method === 'PATCH') {
+        const note = { ...stored.get(body.id) }
+        if (body.resolved === true) note.resolvedAt = stamp
+        else if (body.resolved === false) delete note.resolvedAt
+        if (typeof body.text === 'string') note.text = body.text
+        note.updatedAt = stamp
+        stored.set(note.id, note)
+        return { ok: true, json: async () => ({ note }) }
+      }
+      stored.delete(body.id)
+      return { ok: true, json: async () => ({ deleted: true }) }
+    },
+  })
+  await setImmediate()
+  const control = (row, label) => row.querySelectorAll('button').find(button => button.textContent === label)
+  return { by, document, calls, control }
+}
+
 const center = rect => rect.top + rect.height / 2
 const expanded = element => element.getAttribute('aria-expanded')
 
@@ -666,7 +702,7 @@ test('the annotation inbox selects by module and marks the notes identified in a
   const [first, second] = by('groups').children
   const [toggle, one, two] = first.querySelectorAll('input')
   assert.equal(by('return').href, '?workspace=inbox')
-  assert.equal(by('total').textContent, '3 条批注')
+  assert.equal(by('total').textContent, '3 条待处理')
   assert.equal(first.querySelector('blockquote').textContent, notes[1].quote)
   assert.equal(by('submit').disabled, true)
   one.checked = true
@@ -717,7 +753,7 @@ test('the annotation inbox edits, cancels, and deletes notes with the current di
   const [first, second] = by('groups').children
   const [one, two] = first.querySelectorAll('li')
   const control = (row, label) => row.querySelectorAll('button').find(button => button.textContent === label)
-  assert.equal(by('total').textContent, '3 条批注')
+  assert.equal(by('total').textContent, '3 条待处理')
   one.querySelector('input').checked = true
   one.querySelector('input').dispatch('change')
   assert.equal(by('selected').textContent, '已选 1 条')
@@ -758,18 +794,142 @@ test('the annotation inbox edits, cancels, and deletes notes with the current di
     { workspace: 'inbox', digest: 'current', group: 'first', id: 'one' }])
   assert.equal(first.querySelectorAll('li').length, 1)
   assert.equal(by('selected').textContent, '已选 0 条')
-  assert.equal(by('total').textContent, '2 条批注')
+  assert.equal(by('total').textContent, '2 条待处理')
 
   control(two, '删除').click()
   await setImmediate()
   assert.equal(by('groups').children.length, 1)
-  assert.equal(by('total').textContent, '1 条批注')
+  assert.equal(by('total').textContent, '1 条待处理')
   control(second.querySelector('li'), '删除').click()
   await setImmediate()
   assert.equal(by('groups').children.length, 0)
-  assert.equal(by('total').textContent, '0 条批注')
+  assert.equal(by('total').textContent, '0 条待处理')
   assert.equal(by('empty').hidden, false)
+  assert.equal(by('empty-title').textContent, '这个项目还没有批注')
   assert.equal(document.body.classList.contains('is-empty'), true)
+})
+
+test('the annotation inbox accepts submitted notes, hides archived notes behind a toggle, and restores them', async () => {
+  const createdAt = '2026-11-22T00:00:00.000Z'
+  const receipt = { sessionId: 'session-accept-0001', submittedAt: createdAt }
+  const notes = [
+    { id: 'one', group: 'first', groupTitle: '模块一', target: { kind: 'group' }, text: '已提交待验收', createdAt, submitted: receipt },
+    { id: 'two', group: 'first', groupTitle: '模块一', target: { kind: 'group' }, text: '未提交', createdAt, submitted: null },
+    { id: 'three', group: 'second', groupTitle: '模块二', target: { kind: 'group' }, text: '已验收归档', createdAt,
+      submitted: { sessionId: 'session-archive-0002', submittedAt: createdAt }, resolvedAt: '2026-11-22T01:00:00.000Z' },
+  ]
+  const asked = []
+  const { by, calls, control } = await openNotesInbox(notes, { confirm: message => { asked.push(message); return true } })
+  const [first, second] = by('groups').children
+  const [one, two] = first.querySelectorAll('li')
+  assert.equal(by('total').textContent, '2 条待处理 · 1 条已归档')
+  assert.equal(by('archived-toggle').hidden, false)
+  assert.equal(by('archived-toggle').textContent, '显示已归档（1）')
+  assert.equal(by('accept-submitted').hidden, false)
+  assert.equal(by('accept-submitted').textContent, '验收已提交的 1 条')
+  assert.equal(by('empty').hidden, true)
+  // A module holding only archived notes stays hidden until the toggle is on.
+  assert.equal(second.hidden, true)
+  assert.equal(one.hidden, false)
+  assert.equal(control(one, '验收').hidden, false)
+  assert.equal(control(two, '验收').hidden, true)
+  assert.equal(control(one, '恢复').hidden, true)
+
+  control(one, '验收').click()
+  await setImmediate()
+  assert.deepEqual(asked, ['验收并归档这条批注？'])
+  assert.deepEqual(calls.at(-1).slice(0, 3), ['api/annotations', 'PATCH',
+    { workspace: 'inbox', digest: 'current', group: 'first', id: 'one', resolved: true }])
+  assert.equal(calls.at(-1)[3]['x-threadlight-client'], 'review')
+  assert.equal(by('status').textContent, '已验收并归档。')
+  assert.equal(one.hidden, true)
+  assert.equal(one.classList.contains('resolved'), true)
+  assert.equal(one.querySelector('input').hidden, true)
+  assert.equal(by('total').textContent, '1 条待处理 · 2 条已归档')
+  assert.equal(by('accept-submitted').hidden, true)
+
+  by('archived-toggle').click()
+  assert.equal(by('archived-toggle').textContent, '隐藏已归档（2）')
+  assert.equal(by('archived-toggle').getAttribute('aria-pressed'), 'true')
+  assert.equal(one.hidden, false)
+  assert.equal(second.hidden, false)
+  const archivedRow = second.querySelector('li')
+  assert.equal(control(archivedRow, '恢复').hidden, false)
+  assert.equal(control(archivedRow, '验收').hidden, true)
+  control(archivedRow, '恢复').click()
+  await setImmediate()
+  assert.deepEqual(calls.at(-1).slice(0, 3), ['api/annotations', 'PATCH',
+    { workspace: 'inbox', digest: 'current', group: 'second', id: 'three', resolved: false }])
+  assert.equal(by('status').textContent, '批注已恢复为待处理。')
+  assert.equal(by('total').textContent, '2 条待处理 · 1 条已归档')
+  assert.equal(control(archivedRow, '恢复').hidden, true)
+  assert.equal(archivedRow.classList.contains('resolved'), false)
+  assert.equal(by('archived-toggle').textContent, '隐藏已归档（1）')
+  by('archived-toggle').click()
+  assert.equal(one.hidden, true)
+  assert.equal(by('archived-toggle').textContent, '显示已归档（1）')
+  assert.equal(by('archived-toggle').getAttribute('aria-pressed'), 'false')
+})
+
+test('the annotation inbox accepts every submitted note in one batch and keeps failures pending', async () => {
+  const createdAt = '2026-11-22T00:00:00.000Z'
+  const receipt = { sessionId: 'session-batch-0001', submittedAt: createdAt }
+  const notes = [
+    { id: 'one', group: 'first', groupTitle: '模块一', target: { kind: 'group' }, text: '第一条', createdAt, submitted: receipt },
+    { id: 'two', group: 'first', groupTitle: '模块一', target: { kind: 'group' }, text: '第二条', createdAt, submitted: receipt },
+    { id: 'three', group: 'first', groupTitle: '模块一', target: { kind: 'group' }, text: '未提交', createdAt, submitted: null },
+    { id: 'four', group: 'second', groupTitle: '模块二', target: { kind: 'group' }, text: '已归档', createdAt,
+      submitted: receipt, resolvedAt: '2026-11-22T01:00:00.000Z' },
+  ]
+  const asked = []
+  let confirmed = false
+  const { by, calls, control } = await openNotesInbox(notes, {
+    confirm: message => { asked.push(message); return confirmed },
+    handle: ({ method, body }) => method === 'PATCH' && body.id === 'two'
+      ? { ok: false, json: async () => ({ error: '归档失败' }) } : null,
+  })
+  assert.equal(by('accept-submitted').hidden, false)
+  assert.equal(by('accept-submitted').textContent, '验收已提交的 2 条')
+  by('accept-submitted').click()
+  await setImmediate()
+  assert.deepEqual(asked, ['验收并归档已提交的 2 条批注？'])
+  assert.equal(calls.filter(call => call[1] === 'PATCH').length, 0)
+
+  confirmed = true
+  by('accept-submitted').click()
+  await setImmediate()
+  assert.deepEqual(calls.filter(call => call[1] === 'PATCH').map(call => call[2]), [
+    { workspace: 'inbox', digest: 'current', group: 'first', id: 'one', resolved: true },
+    { workspace: 'inbox', digest: 'current', group: 'first', id: 'two', resolved: true },
+  ])
+  assert.equal(by('status').textContent, '有 1 条批注归档失败，请刷新后重试。')
+  assert.equal(by('status').classList.contains('error'), true)
+  assert.equal(by('total').textContent, '2 条待处理 · 2 条已归档')
+  assert.equal(by('accept-submitted').textContent, '验收已提交的 1 条')
+  const [one, two] = by('groups').children[0].querySelectorAll('li')
+  assert.equal(one.hidden, true)
+  assert.equal(two.hidden, false)
+  assert.equal(control(two, '验收').hidden, false)
+})
+
+test('an all-accepted inbox is reported as having no pending notes instead of no notes', async () => {
+  const createdAt = '2026-11-22T00:00:00.000Z'
+  const resolvedAt = '2026-11-22T01:00:00.000Z'
+  const notes = [
+    { id: 'one', group: 'first', groupTitle: '模块一', target: { kind: 'group' }, text: '第一条', createdAt, submitted: null, resolvedAt },
+    { id: 'two', group: 'second', groupTitle: '模块二', target: { kind: 'group' }, text: '第二条', createdAt, submitted: null, resolvedAt },
+  ]
+  const { by, document } = await openNotesInbox(notes)
+  assert.equal(by('total').textContent, '0 条待处理 · 2 条已归档')
+  assert.equal(by('empty').hidden, false)
+  assert.equal(by('empty-title').textContent, '没有待处理批注')
+  assert.equal(by('empty-hint').textContent, '所有批注都已验收归档。可以用「显示已归档」查看或恢复。')
+  assert.equal(document.body.classList.contains('is-empty'), true)
+  assert.deepEqual(by('groups').children.map(section => section.hidden), [true, true])
+  by('archived-toggle').click()
+  assert.deepEqual(by('groups').children.map(section => section.hidden), [false, false])
+  assert.ok(by('groups').children.every(section => section.querySelector('li').hidden === false))
+  assert.equal(by('archived-toggle').textContent, '隐藏已归档（2）')
 })
 
 test('relation wires are an overlay instead of a third grid cell', () => {

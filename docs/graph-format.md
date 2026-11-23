@@ -164,15 +164,15 @@ refresh 为带行号的证据写入 anchor。lineHash 是引用行的 SHA-256，
 
 ## 查看器批注
 
-DSH 查看器将批注保存在 `.threadlight/annotations/<功能区 ID>/<UUID>.json`。记录包含 id、text、createdAt、module、graph、target 和可选的 quote。module 为功能区 ID，graph 为创建批注时的图谱 SHA-256。修改正文时补写 ISO-8601 格式的 updatedAt，保留原引用、归属和创建时间。
+DSH 查看器将批注保存在 `.threadlight/annotations/<功能区 ID>/<UUID>.json`。记录包含 id、text、createdAt、module、graph、target 和可选的 quote。module 为功能区 ID，graph 为创建批注时的图谱 SHA-256。修改正文时补写 ISO-8601 格式的 updatedAt，保留原引用、归属和创建时间。用户验收批注时写入 ISO-8601 的 resolvedAt 和 resolvedBy: 'user'；验收后的批注归档，不再出现在待处理列表，可恢复为待处理。
 
 target 的 kind 可取 group、flow 或 step。group 以 module 为目标，flow 还需指定该模块下的 flow ID，step 另需指定该线路下的 step ID。没有 target 的旧记录按 `{ "kind": "group" }` 读取。text 为 1 至 3000 字符的正文。可选的 quote 最长 3000 字符，保留选文的空白与换行。
 
-`GET /threadlight/api/annotations` 返回指定模块的批注列表。`POST` 新建并返回 `{ note }`，`PATCH` 按 id 修改正文并返回 `{ note }`，`DELETE` 按 id 删除文件并返回 `{ deleted: true }`。请求需提供 workspace、group 和当前 digest，写请求沿用审阅页的同源校验。目标无效返回 400，找不到待修改或删除的批注返回 404，图谱已更新返回 409。
+`GET /threadlight/api/annotations` 返回指定模块的批注列表。`POST` 新建并返回 `{ note }`，`PATCH` 按 id 修改正文（`text`）或验收状态（`resolved: true | false`，分别写入或清除 resolvedAt）并返回 `{ note }`，`DELETE` 按 id 删除文件并返回 `{ deleted: true }`。请求需提供 workspace、group 和当前 digest，写请求沿用审阅页的同源校验。目标无效返回 400，找不到待修改或删除的批注返回 404，图谱已更新返回 409。
 
-`GET /threadlight/api/annotations?workspace=<id>&all=1` 返回工作区全部批注，附加 group、groupTitle、适用的 flowTitle 和 stepTitle，以及 `submitted: { sessionId, submittedAt } | null`。标题无法解析时显示对应 ID。有多个回执时显示最近一次接收记录。批注箱对每条批注提供修改和删除，分别调用 PATCH 和 DELETE，并带上当前 digest。
+`GET /threadlight/api/annotations?workspace=<id>&all=1` 返回工作区全部批注，附加 group、groupTitle、适用的 flowTitle 和 stepTitle、`submitted: { sessionId, submittedAt } | null`，以及可选的 resolvedAt。标题无法解析时显示对应 ID。有多个回执时显示最近一次接收记录。批注箱对每条批注提供修改、删除、验收归档与恢复，分别调用 PATCH 和 DELETE，并带上当前 digest。
 
-`POST /threadlight/api/annotations-submit` 接收 workspace、1 至 100 个批注 UUID 组成的 ids，可选的 digest，以及可选的 `agentPreset`（主会话使用的 DSH agent preset）。省略 digest 时使用当前图谱摘要。每条批注都须属于该工作区和当前图谱，且能解析到目标。批注缺失返回 404，摘要或批注所属图谱不匹配返回 409，preset 不存在返回 400，preset 服务缺失或不可用返回 503。所有批注进入同一个主会话：提示词按模块分组，要求主会话用 `subagent` 工具为每个模块派出子代理、控制并行数量、逐模块复核并汇总结果。接口只读取批注，DSH 接收任务后返回 `{ submission }`；回执记录 `noteIds`、`modules`、可选 `agentPreset` 和 `digest`，同一组批注重复提交复用原会话。
+`POST /threadlight/api/annotations-submit` 接收 workspace、1 至 100 个批注 UUID 组成的 ids，可选的 digest，以及可选的 `agentPreset`（主会话使用的 DSH agent preset）。省略 digest 时使用当前图谱摘要。每条批注都须属于该工作区和当前图谱，且能解析到目标。批注缺失返回 404，摘要或批注所属图谱不匹配返回 409，已验收归档返回 409，preset 不存在返回 400，preset 服务缺失或不可用返回 503。所有批注进入同一个主会话：提示词按模块分组，要求主会话用 `subagent` 工具为每个模块派出子代理、控制并行数量、逐模块复核并汇总结果。接口只读取批注，DSH 接收任务后返回 `{ submission }`；回执记录 `noteIds`、`modules`、可选 `agentPreset` 和 `digest`，同一组批注重复提交复用原会话。
 
 回执保存在 `.threadlight/submissions/<digest>.json`，包含 schemaVersion（固定为 1）、digest、noteIds、workspace、sessionId、requestId、prompt 和 ISO-8601 格式的 submittedAt。回执的 digest 取去重、排序后的 UUID 数组 JSON 的 SHA-256，区别于图谱摘要。相同批注 ID 集合重复提交会返回已有回执，顺序和正文编辑不改变提交标识。DSH 拒收时返回 502，同一集合的重试从 `<digest>.pending.json` 复用会话 ID、请求 ID 和提示词。批注箱读取有效的接收回执，跳过待提交记录和损坏文件。
 

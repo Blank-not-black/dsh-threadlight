@@ -1,6 +1,6 @@
 {
   "name": "dsh-threadlight",
-  "version": "0.1.0-dev.14",
+  "version": "0.1.0-dev.15",
   "description": "A DSH plugin for documenting Git projects and exploring source-linked workflows.",
   "license": "MIT",
   "author": "Blank_not_black <2687104205@qq.com>",

@@ -14,7 +14,10 @@
       <p id="project"></p>
       <h1>批注箱 <span id="total"></span></h1>
     </div>
-    <a id="return" class="dsh-link" href="./">返回图谱</a>
+    <div class="header-tools">
+      <button type="button" id="archived-toggle" aria-pressed="false" hidden>显示已归档（0）</button>
+      <a id="return" class="dsh-link" href="./">返回图谱</a>
+    </div>
   </header>
   <main id="notes" aria-label="项目批注">
     <section id="empty" class="empty-state" hidden>
@@ -29,6 +32,7 @@
   <footer>
     <p id="status" role="status">正在读取批注…</p>
     <div class="submit-actions">
+      <button type="button" id="accept-submitted" hidden>验收已提交的 0 条</button>
       <span id="selected">已选 0 条</span>
       <label id="agent-picker" class="preset-picker" hidden>
         <span class="preset-caption">主会话 Agent</span>

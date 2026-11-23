@@ -42,3 +42,45 @@ input:not([type=checkbox]),textarea,select { display: block; width: 100%; margin
 .note-list .links { margin-top: 5px; }
 .note-list .links label,.connections-label { display: inline-flex; gap: 5px; align-items: center; }
 .dsh-drafts .remove { color: var(--error); }
+
+/* The editor also runs inside the Threadlight side panel. Once the window is
+   narrower than two readable sidebars plus a canvas, turn both sidebars into
+   overlay drawers so the diagram keeps the full width; the toolbar and header
+   reflow to keep every control reachable. */
+@media (max-width: 1100px) {
+  .workspace { grid-template-columns: minmax(0, 1fr); }
+  .sidebar {
+    position: absolute;
+    inset-block: 0;
+    width: min(330px, 86vw);
+    z-index: 2;
+    box-shadow: 0 0 0 1px var(--line), 0 18px 44px rgb(0 0 0 / .28);
+  }
+  .plan { inset-inline-start: 0; }
+  .details { inset-inline-end: 0; }
+  .diagram { grid-area: 1 / 1; }
+}
+
+@media (max-width: 900px) {
+  .diagram-toolbar {
+    display: grid;
+    grid-template-columns: auto auto;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px 10px;
+  }
+  .diagram-tools { grid-column: 1 / -1; grid-row: 2; justify-content: center; }
+  [data-sidebar] { width: max-content; }
+  [data-sidebar="plan"] { grid-column: 1; grid-row: 1; justify-self: start; }
+  [data-sidebar="details"] { grid-column: 2; grid-row: 1; justify-self: end; }
+  .diagram-controls { justify-content: center; }
+  .header-actions, .actions { justify-content: flex-end; }
+  #status { max-width: 46vw; }
+}
+
+@media (max-width: 720px) {
+  header { grid-template-columns: minmax(0, 1fr) auto; }
+  #status { grid-column: 1 / -1; justify-self: start; text-align: start; max-width: none; }
+  .diagram-hint { font-size: .74rem; }
+  .step-picker select { width: clamp(80px, 30vw, 160px); }
+}

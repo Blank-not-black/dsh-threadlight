@@ -2,6 +2,8 @@ body { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: 100v
 header, footer { background: var(--panel); padding: 12px clamp(12px, 4vw, 38px); }
 header { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-bottom: 1px solid var(--line); }
 header a { flex-shrink: 0; }
+.header-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 10px; }
+.header-tools #archived-toggle { font-size: .85rem; }
 #project, #total { color: var(--quiet); font-size: .88rem; font-weight: normal; }
 h1 { font-size: 1.45rem; }
 main { overflow: auto; padding: 24px clamp(12px, 4vw, 38px); }
@@ -28,7 +30,12 @@ blockquote { margin: 8px 0; padding: 8px 12px; color: var(--quiet); background: 
 .note-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .note-body textarea { display: block; width: 100%; min-height: 6rem; margin: 6px 0; }
 .submitted { color: var(--accent); }
+.archived { color: var(--quiet); }
+/* Accepted notes stay reachable behind the "显示已归档" toggle but read as done. */
+li.resolved { opacity: .72; }
+li.resolved .note-target { font-weight: 500; }
 footer { border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
+#accept-submitted { white-space: nowrap; }
 #status { flex: 1 1 20rem; }
 #status:empty { flex-basis: 0; }
 .empty-state { padding: 26px clamp(18px, 3vw, 30px); }
@@ -39,6 +46,8 @@ body.is-empty footer { display: none; }
 .submit-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .submit-actions .preset-picker select { max-width: 12rem; }
 @media (max-width: 40rem) {
+  header { align-items: flex-start; }
+  .header-tools { justify-content: flex-start; }
   .group-heading { align-items: flex-start; }
   .group-tools { justify-content: flex-start; }
   .submit-actions { margin-left: 0; }

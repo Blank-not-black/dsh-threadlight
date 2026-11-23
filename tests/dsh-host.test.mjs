@@ -301,6 +301,7 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   assert.equal(stepNote.quote, quote)
   assert.deepEqual(JSON.parse(await readFile(noteFile(stepNote.id), 'utf8')), { ...stepNote, module: group.id, graph: digest })
   const mutate = (method, fields, headers = {}) => post('annotations', { ...noteScope, id: stepNote.id, ...fields }, headers, method)
+  const patchNote = (id, fields, headers = {}) => post('annotations', { ...noteScope, id, ...fields }, headers, 'PATCH')
   for (const method of ['PATCH', 'DELETE']) {
     assert.equal((await mutate(method, {}, { 'x-threadlight-client': 'other' })).status, 403)
     assert.equal((await mutate(method, { digest: 'stale' })).status, 409)
@@ -319,6 +320,9 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   assert.equal((await fetch(notesPage)).status, 401)
   const notesHtml = await getPage(notesPage)
   assert.match(notesHtml, /批注箱/)
+  // Acceptance controls are part of the shipped inbox markup, not injected later.
+  assert.match(notesHtml, /id="archived-toggle"[^>]*hidden>显示已归档/)
+  assert.match(notesHtml, /id="accept-submitted"[^>]*hidden>验收已提交的/)
   assert.deepEqual(JSON.parse(notesHtml.match(/id="notes-context" type="application\/json">(.*?)<\/script>/s)[1]),
     { workspace: reviewWorkspace, digest, project: data.project.name, maxSelection: 100 })
   assert.equal((await fetch(new URL('notes.js', notesPage), { headers: { cookie } })).status, 200)
@@ -404,6 +408,41 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   assert.equal(refreshedNotes.get(flowNote.id).submitted, null)
   assert.deepEqual(JSON.parse(await readFile(noteFile(updated.id), 'utf8')), { ...updated, module: group.id, graph: digest })
 
+  // Acceptance archives a note: PATCH resolved=true records the timestamp, moves
+  // the note out of the pending queue, and a later submission is refused early.
+  assert.equal((await patchNote(flowNote.id, {})).status, 400)
+  assert.equal((await patchNote(flowNote.id, { resolved: 'yes' })).status, 400)
+  assert.equal((await patchNote(flowNote.id, { resolved: true, text: '' })).status, 400)
+  const accepted = await patchNote(flowNote.id, { resolved: true })
+  assert.equal(accepted.status, 200, await accepted.clone().text())
+  const { note: acceptedNote } = await accepted.json()
+  assert.ok(Number.isFinite(Date.parse(acceptedNote.resolvedAt)))
+  assert.equal(acceptedNote.id, flowNote.id)
+  assert.equal(acceptedNote.text, flowNote.text)
+  assert.deepEqual(acceptedNote.target, flowNote.target)
+  assert.equal(Object.hasOwn(acceptedNote, 'resolvedBy'), false)
+  const archivedOnDisk = JSON.parse(await readFile(noteFile(flowNote.id), 'utf8'))
+  assert.equal(archivedOnDisk.resolvedAt, acceptedNote.resolvedAt)
+  assert.equal(archivedOnDisk.resolvedBy, 'user')
+  assert.equal(archivedOnDisk.module, group.id)
+  assert.equal(archivedOnDisk.graph, digest)
+  const archivedNotes = await getAllNotes()
+  assert.equal(archivedNotes.get(flowNote.id).resolvedAt, acceptedNote.resolvedAt)
+  assert.equal(Object.hasOwn(archivedNotes.get(savedNote.id), 'resolvedAt'), false)
+  const archivedSummary = await (await fetch(new URL('threadlight/api/summary?session=' + noteReceipt.sessionId,
+    result.base), { headers: { cookie } })).json()
+  assert.deepEqual(archivedSummary.notes, { total: 4, pending: 3, submitted: 2, resolved: 1 })
+  assert.equal(archivedSummary.notes.pending + archivedSummary.notes.resolved, archivedSummary.notes.total)
+  const rejectedArchived = await submitNotes({ ids: [flowNote.id] })
+  assert.equal(rejectedArchived.status, 409)
+  assert.equal((await rejectedArchived.json()).error, '批注已验收归档，请刷新后重试。')
+  const restored = await patchNote(flowNote.id, { resolved: false, text: flowNote.text })
+  assert.equal(restored.status, 200, await restored.clone().text())
+  const { note: restoredNote } = await restored.json()
+  assert.equal(Object.hasOwn(restoredNote, 'resolvedAt'), false)
+  assert.equal(restoredNote.text, flowNote.text)
+  assert.equal(Object.hasOwn((await getAllNotes()).get(flowNote.id), 'resolvedAt'), false)
+
   // Session-scoped summary: the host resolves the session to its workspace,
   // reports graph counts and marks annotations already covered by a receipt.
   const summaryUrl = new URL('threadlight/api/summary?session=' + noteReceipt.sessionId, result.base)
@@ -421,8 +460,9 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   assert.equal(summary.graph.steps, exampleGraph.groups.reduce((total, entry) =>
     total + entry.flows.reduce((count, entryFlow) => count + entryFlow.nodes.length, 0), 0))
   // Two notes were submitted by noteReceipt; the orphan note keeps a directory
-  // the summary still counts as pending.
-  assert.deepEqual(summary.notes, { total: 4, pending: 2, submitted: 2 })
+  // the summary still counts as pending. Submitted notes stay pending until the
+  // user accepts them, so pending is the whole unarchived backlog.
+  assert.deepEqual(summary.notes, { total: 4, pending: 4, submitted: 2, resolved: 0 })
   const unknownSummarySession = await fetch(new URL('threadlight/api/summary?session=' + randomUUID(), result.base),
     { headers: { cookie } })
   assert.equal(unknownSummarySession.status, 404)

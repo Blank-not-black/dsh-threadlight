@@ -1,13 +1,13 @@
 import { GeometryChange, Graph, HierarchicalLayout, ImageBox, InternalEvent, Point, TerminalChange } from '@maxgraph/core'
 
-const nodeWidth = 192
-const nodeHeight = 72
+const nodeWidth = 216
+const nodeHeight = 96
 const autoEdgeStyle = 'manhattanEdgeStyle'
 const manualEdgeStyle = 'segmentEdgeStyle'
 const wireIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 18 18"%3E%3Ccircle cx="9" cy="9" r="8" fill="%23225e48" stroke="white"/%3E%3Cpath d="M5 9h8M9 5v8" stroke="white" stroke-width="1.5"/%3E%3C/svg%3E'
 const nodeStyle = {
   rounded: true, arcSize: 14, fillColor: 'var(--panel)', strokeColor: 'var(--accent)',
-  strokeWidth: 1.25, fontColor: 'var(--ink)', fontSize: 14, spacing: 8, resizable: false,
+  strokeWidth: 1.25, fontColor: 'var(--ink)', fontSize: 13, spacing: 8, resizable: false,
 }
 const edgeStyle = {
   strokeColor: 'var(--accent)', strokeWidth: 1.55, endArrow: 'block', endSize: 7,
@@ -18,6 +18,33 @@ const edgeStyle = {
 function shortened(text, max) {
   const characters = [...text.trim().replace(/\s+/g, ' ')]
   return characters.length > max ? characters.slice(0, max - 1).join('') + '…' : characters.join('')
+}
+
+/**
+ * Break one field into whole-character lines. The diagram is an editing
+ * surface, so a node shows the readable head of its title and summary instead
+ * of one clipped line; `max` is tuned to the node width at the default font.
+ * @param {string} text - field value.
+ * @param {number} max - characters per line.
+ * @param {number} lines - maximum line count.
+ * @returns {string[]} wrapped lines, the last one ellipsized when cut.
+ */
+function wrapped(text, max, lines) {
+  const characters = [...String(text ?? '').trim().replace(/\s+/g, ' ')]
+  const result = []
+  for (let index = 0; index < characters.length && result.length < lines; index += max) {
+    result.push(characters.slice(index, index + max).join(''))
+  }
+  if (characters.length > max * lines && result.length) {
+    result[result.length - 1] = [...result[result.length - 1]].slice(0, max - 1).join('') + '…'
+  }
+  return result
+}
+
+function nodeLabel(node) {
+  const title = wrapped(node.title || '未命名步骤', 13, 2)
+  const summary = wrapped(node.summary, 17, 3)
+  return [...title, ...summary].join('\n')
 }
 
 function boundedPoint({ x, y }) {
@@ -58,7 +85,7 @@ export function createDraftDiagram(container, callbacks) {
   graph.getSelectionModel().setSingleSelection(true)
   graph.getStylesheet().getDefaultEdgeStyle().edgeStyle = autoEdgeStyle
   graph.getView().setTranslate(30, 26)
-  fitPlugin.minFitScale = .28
+  fitPlugin.minFitScale = .45
   fitPlugin.maxFitScale = 1
   const connector = graph.getPlugin('ConnectionHandler')
   connector.connectImage = new ImageBox(wireIcon, 18, 18)
@@ -207,8 +234,7 @@ export function createDraftDiagram(container, callbacks) {
         positioned = Boolean(next.layout?.length)
         for (const node of next.nodes) {
           const cell = nodes.get(node.id)
-          const title = shortened(node.title, 12) || '未命名步骤'
-          const label = node.summary ? title + '\n' + shortened(node.summary, 14) : title
+          const label = nodeLabel(node)
           if (cell.getValue() !== label) model.setValue(cell, label)
         }
         const width = Math.max(container.clientWidth - 60, ...[...nodes.values()].map(cell => {
