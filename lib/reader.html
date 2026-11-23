@@ -34,8 +34,15 @@
     .brand { font-size: .8rem; font-weight: 640; color: var(--accent); }
     h1 { font-size: clamp(1.55rem,4vw,2rem); line-height: 1.2; letter-spacing: -.035em; }
     .header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; font-size: .88rem; }
+    .header-actions .header-control {
+      display: inline-flex; align-items: center; padding: 6px 10px; border-radius: 7px;
+      border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+      font: inherit; font-size: .88rem; line-height: 1.2; text-decoration: none; cursor: pointer;
+    }
+    .header-actions .header-control:hover { border-color: var(--accent); color: var(--accent); }
     .export-options { position: relative; }
-    .export-options summary { cursor: pointer; color: var(--accent); }
+    .export-options summary { list-style: none; }
+    .export-options summary::-webkit-details-marker { display: none; }
     .export-panel { position: absolute; z-index: 2; inset-inline-end: 0; min-width: max-content; margin-top: 5px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: 0 5px 22px #0002; }
     .export-panel button { display: block; width: 100%; text-align: left; }
     .export-panel button + button { margin-top: 5px; }
@@ -222,9 +229,9 @@
     <div><p class="brand">Threadlight</p><h1 id="project"></h1></div>
     <div class="header-actions">
       <label class="beginner"><input type="checkbox" id="beginner">新手模式</label>
-      <button class="guide-control" id="shortcut-help" type="button" aria-haspopup="dialog" aria-controls="reader-dialog">快捷键</button>
+      <button class="guide-control header-control" id="shortcut-help" type="button" aria-haspopup="dialog" aria-controls="reader-dialog">快捷键</button>
       <details class="export-options" id="export-options">
-        <summary id="export-toggle">导出</summary>
+        <summary id="export-toggle" class="header-control">导出</summary>
         <div class="export-panel">
           <button class="guide-control" id="export-png" type="button">导出 PNG</button>
           <button class="guide-control" id="print-view" type="button">打印 / 另存为 PDF</button>
@@ -438,6 +445,7 @@
       if (node.divergence) detail.append(make('h3', '与预期的差异'), make('p', node.divergence, 'divergence'))
     }
 
+    let tooltipCleanup
     function positionTooltip() {
       if (!activeTerm) return
       const anchor = activeTerm.getBoundingClientRect()
@@ -445,6 +453,9 @@
         hideTooltip()
         return
       }
+      // The review page ships a bundled positioning library; the offline file
+      // has no external assets, so keep the local math as the fallback.
+      if (window.ThreadlightFloating?.position) return
       const { width, height } = tooltip.getBoundingClientRect()
       const below = anchor.bottom + 6
       const above = anchor.top - height - 6
@@ -458,6 +469,8 @@
       activeTerm?.removeAttribute('aria-describedby')
       activeTerm = null
       pinned = false
+      tooltipCleanup?.()
+      tooltipCleanup = undefined
       tooltip.hidden = true
     }
 
@@ -470,6 +483,9 @@
         tooltip.lastElementChild.textContent = definition
         trigger.setAttribute('aria-describedby', tooltip.id)
         tooltip.hidden = false
+      }
+      if (window.ThreadlightFloating?.position && !tooltipCleanup) {
+        tooltipCleanup = window.ThreadlightFloating.position(trigger, tooltip, { placement: 'top-start' })
       }
       positionTooltip()
     }

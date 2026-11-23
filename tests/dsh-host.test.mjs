@@ -179,6 +179,21 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
     assert.equal(result.status, 200)
     return result.text()
   }
+  const checkStyles = async (asset, ...pages) => {
+    for (const page of pages) {
+      const links = page.match(/<link\b[^>]*>/gi) ?? []
+      assert.equal(links.length, 1, asset)
+      assert.match(links[0], /\brel="stylesheet"/)
+      assert.ok(links[0].includes('href="' + asset + '"'), links[0])
+    }
+    const response = await fetch(new URL(asset, launcher), { headers: { cookie } })
+    assert.equal(response.status, 200, asset)
+    assert.match(response.headers.get('content-type'), /^text\/css\b/)
+    const css = await response.text()
+    assert.match(css, /^\/\* threadlight-ui \*\//, asset)
+    assert.equal(css.match(/\/\* threadlight-ui \*\//g)?.length, 1, asset)
+    assert.match(css, /^\s*--accent:\s*light-dark\(/m, asset)
+  }
   assert.equal((await fetch(workspaceList)).status, 401)
   const createHtml = await getPage(createPage)
   assert.match(createHtml, /<h1>创建新工作区<\/h1>/)
@@ -197,9 +212,9 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   assert.match(workspacesHtml, /data-graph-mode="regenerate"/)
   assert.match(await getPage(new URL('?workspace=missing', launcher)), /role="alert">找不到此工作区/)
   assert.match(html, /href="\?view=workspaces">切换工作区/)
-  for (const asset of ['launch.js', 'launch.css']) {
-    assert.equal((await fetch(new URL(asset, launcher), { headers: { cookie } })).status, 200)
-  }
+  assert.equal((await fetch(new URL('launch.js', launcher), { headers: { cookie } })).status, 200)
+  await checkStyles('launch.css', launcherHtml, createHtml, workspacesHtml)
+  await checkStyles('review.css', html)
   assert.equal((await post('workspaces', { path: newWorkspace }, { 'sec-fetch-site': 'cross-site' })).status, 403)
   assert.equal((await post('workspaces', { path: 'relative-directory' })).status, 400)
   assert.equal((await post('workspaces', { path: join(home, 'missing') })).status, 400)
@@ -306,9 +321,8 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   assert.match(notesHtml, /批注箱/)
   assert.deepEqual(JSON.parse(notesHtml.match(/id="notes-context" type="application\/json">(.*?)<\/script>/s)[1]),
     { workspace: reviewWorkspace, digest, project: data.project.name, maxSelection: 100 })
-  for (const asset of ['notes.js', 'notes.css']) {
-    assert.equal((await fetch(new URL(asset, notesPage), { headers: { cookie } })).status, 200)
-  }
+  assert.equal((await fetch(new URL('notes.js', notesPage), { headers: { cookie } })).status, 200)
+  await checkStyles('notes.css', notesHtml)
   const getAllNotes = async () => {
     const url = new URL('api/annotations?' + new URLSearchParams({ workspace: reviewWorkspace, all: '1' }), notesPage)
     const response = await fetch(url, { headers: { cookie, 'x-threadlight-client': 'review' } })
@@ -405,7 +419,8 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   const emptyHtml = await (await fetch(emptyPage, { headers: { cookie } })).text()
   const draftConfig = JSON.parse(emptyHtml.match(/id="draft-context">(.*?)<\/script>/s)[1])
   assert.deepEqual(draftConfig, { workspace: result.empty, project: 'Empty fixture', hasGraph: false, canSubmit: true, seed: null })
-  for (const asset of ['drafts.js', 'drafts.css', 'draft-diagram.js', 'maxgraph-LICENSE.txt']) {
+  await checkStyles('drafts.css', emptyHtml, createdDraftHtml, newDraftHtml)
+  for (const asset of ['drafts.js', 'draft-diagram.js', 'maxgraph-LICENSE.txt']) {
     assert.equal((await fetch(new URL(asset, emptyPage), { headers: { cookie } })).status, 200)
   }
   const diagramAsset = new URL('draft-diagram.js', emptyPage)

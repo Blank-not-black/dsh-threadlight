@@ -1,0 +1,96 @@
+/* threadlight-ui */
+:root {
+  color-scheme: light dark;
+  --paper: light-dark(#f7f6f1,#151719);
+  --panel: light-dark(#fffefb,#1d2022);
+  --ink: light-dark(#202a26,#e9eeea);
+  --quiet: light-dark(#53605a,#aab8b0);
+  --line: light-dark(#d8ded7,#353e39);
+  --accent: light-dark(#176047,#8dd1ad);
+  --highlight: light-dark(#e4efe7,#283b33);
+  --error: light-dark(#963e2d,#ffad98);
+  --radius: 8px;
+  --font-sans: Inter, "Microsoft YaHei UI", "PingFang SC", system-ui, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font: 15px/1.58 var(--font-sans);
+}
+
+* { box-sizing: border-box; }
+:where(body, h1, h2, h3, p) { margin: 0; }
+[hidden] { display: none !important; }
+a { color: var(--accent); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+:where(input[type="checkbox"], input[type="radio"]) { accent-color: var(--accent); }
+
+/* 顶栏控件沿用离线查看器的选择器，随宿主样式覆盖内联外观。 */
+:is(.workspace-button, .review-button, .dsh-action, .dsh-button, .dsh-link,
+    .header-actions .header-control, .export-panel button,
+    .dsh-drafts button, .dsh-notes button, .review-menu button, .review-dialog button) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+  font-size: .88rem;
+  text-decoration: none;
+  cursor: pointer;
+
+  &:hover:where(:not(.primary, :disabled, [aria-disabled="true"])) {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  &.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--panel);
+    font-weight: 650;
+  }
+  &.primary:hover:where(:not(:disabled, [aria-disabled="true"])) {
+    background: color-mix(in srgb, var(--accent) 90%, var(--ink));
+  }
+  &:is(:disabled, [aria-disabled="true"]) {
+    color: var(--quiet);
+    background: var(--highlight);
+    border-color: var(--line);
+    cursor: default;
+  }
+}
+
+:is(input:not([type="checkbox"], [type="radio"], [type="hidden"]), select, textarea) {
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+  font: inherit;
+
+  &:focus-visible {
+    border-color: var(--accent);
+    outline-offset: 1px;
+  }
+}
+textarea { resize: vertical; }
+
+:where(.dsh-card, .workspace-form, .workspace-list li, .workspace-empty,
+    .dsh-notes section, .empty-state, .review-menu, .review-dialog) {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--ink);
+}
+:where(.empty-state, .workspace-empty) { padding: 18px; }
+:where(.empty-state p, .workspace-empty) { color: var(--quiet); }
+
+:where(.muted, .workspace-state, .workspace-status, .workspace-count, .review-status,
+    .dsh-drafts #status, .dsh-notes #status) { color: var(--quiet); }
+.workspace-state { font-size: .9rem; }
+[data-state="graph"] .workspace-state { color: var(--accent); }
+.workspace-state.error, .workspace-status.error, .workspace-alert, .review-status.error,
+:is([data-state="issue"], [data-state="unavailable"]) .workspace-state,
+:where(.dsh-drafts, .dsh-notes) #status.error { color: var(--error); }

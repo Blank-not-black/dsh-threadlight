@@ -1,6 +1,6 @@
 {
   "name": "dsh-threadlight",
-  "version": "0.1.0-dev.10",
+  "version": "0.1.0-dev.11",
   "description": "A DSH plugin for documenting Git projects and exploring source-linked workflows.",
   "license": "MIT",
   "author": "Blank_not_black <2687104205@qq.com>",
@@ -38,7 +38,8 @@
     "llms.txt",
     "AGENTS.md",
     "docs/graph-format.md",
-    "docs/roadmap.md"
+    "docs/roadmap.md",
+    "dist/dsh-floating.js"
   ],
   "keywords": [
     "dsh-plugin",
@@ -51,7 +52,7 @@
     "node": ">=22"
   },
   "scripts": {
-    "build": "node scripts/build-draft-diagram.mjs",
+    "build": "node scripts/build-draft-diagram.mjs && node scripts/build-ui.mjs",
     "precheck": "npm run build",
     "prepack": "npm run build",
     "check": "node --test tests/*.test.mjs"
@@ -69,6 +70,7 @@
     }
   },
   "devDependencies": {
+    "@floating-ui/dom": "1.8.0",
     "@maxgraph/core": "0.25.2",
     "esbuild": "0.28.1"
   }
