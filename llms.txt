@@ -1,0 +1,80 @@
+# Threadlight
+
+> Threadlight 是一个 DeepSeek Harness（DSH）插件与 CLI：把 Git 项目梳理成「项目 → 领域 → 功能区 → 线路 → 步骤」的图谱，用同一份数据渲染离线 HTML 查看器和分模块 Markdown。用户可以在图上写批注并直接提交给 DSH 修改代码，也可以编辑流程草稿后提交实现任务。
+
+如果你是收到「安装/试一下 Threadlight」指令的 agent，按下面「安装」执行，然后把结果和遇到的错误如实报告给用户。不要跳过校验步骤。
+
+## 环境
+
+- Node.js >= 22
+- Git（`refresh` 读取工作树差异）
+- 可用的 DSH 安装：`dsh` 在 PATH，或提供其 `lib/bin.js` 绝对路径
+- 只有生成图谱时才需要模型：需要一个可用模型配置的 DSH profile（`--patch` 指向该配置）
+
+## 安装（DSH Web/Desktop profile）
+
+```powershell
+npm ci
+npm run build
+npm pack --pack-destination dist
+# 记下输出的 tgz 绝对路径，然后
+dsh plugin --profile <profile> add "file:<abs path>/dsh-threadlight-<version>.tgz"
+dsh --profile <profile>
+```
+
+`<profile>` 通常是 `desktop` 或 `web`。安装后重启 DSH；侧栏出现 **Threadlight**，或在同一 DSH Web 地址下访问 `/threadlight/`。
+
+## CLI
+
+```powershell
+node bin/dsh-threadlight.mjs validate <graph.json> [--json]      # 校验图谱，--json 输出结构化回执
+node bin/dsh-threadlight.mjs view <graph.json> <out-dir>         # 渲染离线查看器
+node bin/dsh-threadlight.mjs refresh [repository] [--patch <dsh patch>] [--dsh-cli <lib/bin.js>] [--code-index <exe>]
+node bin/dsh-threadlight.mjs watch   [repository] [--interval <seconds>]  # 前台轮询，Ctrl+C 停止
+node bin/dsh-threadlight.mjs report  [repository]                # 应用实现报告（把实现位置与验证结果挂回步骤）
+node bin/dsh-threadlight.mjs changelog [repository] [--limit <n>] [--from <rev> --to <rev>] [--format md|json]
+node bin/dsh-threadlight.mjs reset   [repository]                # 归档当前发布，下次 refresh 全量重建
+node bin/dsh-threadlight.mjs export  <graph.json> <out-dir>      # Obsidian 笔记 + JSON Canvas
+```
+
+输出目录都是 `<repository>/.threadlight/`：`viewer.html` 是入口，`revisions/` 保留历次版本，`history.json` 记录发布历史，`drafts/`、`annotations/`、`submissions/`、`implementation/` 是用户数据。建议把 `.threadlight/` 加入目标项目的 `.gitignore`。
+
+## 推荐工作流
+
+1. 首次生成：`refresh <repo> --patch <dsh patch>`。它启动一个独立 DSH 会话，交给 `threadlight-document-project` 技能，产出 `.threadlight/revisions/<rev>/graph.json` 与查看器。
+2. 日常更新：`watch` 或再跑一次 `refresh`。只处理工作树变化，未变时输出 `unchanged`。
+3. 用户在 DSH 的 Threadlight 页面写批注 → 「批注箱」直接提交给 DSH；或建草稿 → 提交实现任务。
+4. 实现完成后：`report <repo>` 把结果挂回步骤，再 `refresh` 复核文档。
+5. 想比对版本：`changelog <repo>`；想重来：`reset <repo>` 后 `refresh`。
+
+## 在 DSH 会话里可用的能力
+
+- 技能 `threadlight-map-project`：首次把项目梳理成图谱（用户说「用 Threadlight 梳理一下这个项目」时使用）。
+- 技能 `threadlight-document-project`：由 `refresh` 在 headless 会话中调用，读写 `.threadlight/input.json` 与 `update.json`，不要手动调用。
+- 工具 `threadlight_export`：把当前工作区 `.threadlight/graph.json` 导出到 Obsidian。
+
+## 契约与文档
+
+- 图谱契约：`docs/graph-format.md`（字段、校验错误码、实现报告、快照）
+- 开发方向：`docs/roadmap.md`
+- 更新日志：`CHANGELOG.md`
+- 开发约定：`AGENTS.md`
+
+## 开发与验证
+
+```powershell
+npm run check          # 构建 + node:test 全量用例
+```
+
+可选的 Rust 代码索引器（给 JavaScript 证据补符号）：
+
+```powershell
+cargo build --manifest-path analyzer/Cargo.toml --release --locked
+node bin/dsh-threadlight.mjs refresh <repo> --code-index analyzer/target/release/threadlight-code-index.exe
+```
+
+## 常见问题
+
+- `refresh` 报找不到 DSH：`--dsh-cli` 指向 `@deepseek-ai/dsh` 的 `lib/bin.js`。
+- 图谱没有更新：默认按 Git 工作树快照比较；先确认改动在采集范围内，或 `reset` 后 `refresh` 全量重建。
+- DSH 内页面空白或 404：确认已重启 DSH，且访问的是安装后的 profile。

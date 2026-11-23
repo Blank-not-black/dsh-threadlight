@@ -3,69 +3,256 @@
   "project": {
     "name": "Threadlight",
     "areas": [
-      { "id": "generation", "title": "图谱生成", "summary": "从 Git 工作树生成并校验文档图谱。" },
-      { "id": "publishing", "title": "阅读与分发", "summary": "打开查看器或导出给 Obsidian。" }
+      {
+        "id": "generation",
+        "title": "图谱生成与校验",
+        "summary": "从当前项目生成线路，核对改动范围和源码证据。"
+      },
+      {
+        "id": "publishing",
+        "title": "查看、发布与分发",
+        "summary": "浏览操作与证据，管理发布版本，在 DSH 或本地打开文档。"
+      },
+      {
+        "id": "review",
+        "title": "批注与审阅任务",
+        "summary": "记录对图谱的反馈，从批注箱或批注对话框交给 DSH。"
+      },
+      {
+        "id": "implementation",
+        "title": "草稿与实现回流",
+        "summary": "编辑下一版流程，提交实现任务，再把结果挂回图谱。"
+      }
     ]
   },
+  "glossary": [
+    {
+      "term": "工作树快照",
+      "definition": "刷新采集的当前 Git 工作树文件集合，包含支持范围内的本地编辑与未忽略的新文件。"
+    },
+    {
+      "term": "证据锚点",
+      "definition": "用于重新定位带行号引用的原始行及相邻上下文指纹。"
+    },
+    {
+      "term": "证据待复核",
+      "definition": "保留了引用的文件路径，行位置需要重新确认。"
+    },
+    {
+      "term": "受影响线路",
+      "definition": "引用了变更文件或带有待复核证据的已记录线路。"
+    },
+    {
+      "term": "回执",
+      "definition": "DSH 接收任务后保存的记录，包含可在工作区查找的会话标识。"
+    },
+    {
+      "term": "基线",
+      "definition": "从图谱复制草稿时记录的原线路、图谱摘要与证据，用于对照改动和定位回流目标。"
+    }
+  ],
   "groups": [
     {
       "id": "documentation",
       "area": "generation",
-      "title": "文档生成",
-      "summary": "根据 Git 工作树的实际变动生成或更新项目文档。",
+      "title": "项目文档生成",
+      "summary": "CLI 用隔离的文档会话发布图谱，DSH Web 也可以发起工作区图谱任务。",
       "flows": [
         {
           "id": "refresh",
           "title": "刷新项目文档",
-          "summary": "读取当前工作树，由独立 DSH 会话分析，再发布一份可浏览的图谱。",
+          "summary": "首次生成全量图谱。工作树变化后按受影响线路做增量复核，可手动刷新或在前台监听。",
           "nodes": [
             {
               "id": "capture",
-              "title": "采集工作树",
-              "summary": "读取满足采集规则的文件，包括尚未提交的本地编辑。",
-              "details": [],
+              "title": "采集工作树快照",
+              "summary": "运行 refresh 即时检查项目，运行 watch 在前台持续检查。",
+              "details": [
+                "读取 Git 工作树内支持的文本，包含已跟踪文件的本地编辑与删除，以及未忽略的新文件。没有可采集文件时报告错误。watch 默认每 15 秒检查，可用 Ctrl+C 停止。"
+              ],
               "sources": [
-                { "path": "lib/git-workspace.mjs", "kind": "source", "line": 32 },
-                { "path": "lib/refresh.mjs", "kind": "source", "line": 6 }
+                { "path": "bin/dsh-threadlight.mjs", "kind": "source" },
+                { "path": "lib/git-workspace.mjs", "kind": "source" },
+                { "path": "lib/refresh.mjs", "kind": "source" }
+              ]
+            },
+            {
+              "id": "full",
+              "title": "首次全量生成",
+              "summary": "尚无发布版本时，DSH 会梳理项目的主要功能和操作线路。",
+              "details": [
+                "以 full 模式列出当前文件并准备全量任务。文档会话需返回项目及线路，源码依据随步骤记录。"
+              ],
+              "sources": [
+                { "path": "lib/refresh.mjs", "kind": "source" },
+                { "path": "skills/threadlight-document-project/SKILL.md", "kind": "documentation" }
+              ]
+            },
+            {
+              "id": "affected",
+              "title": "确定受影响线路",
+              "summary": "后续更新会计算涉及哪些线路，刷新后可查看受影响数和实际改动数。",
+              "details": [
+                "与上次采集记录按路径和内容比较。证据引用了变更路径或标记为待复核的线路进入 affectedFlows，旧图谱随增量任务提供。"
+              ],
+              "sources": [
+                { "path": "lib/git-workspace.mjs", "kind": "source" },
+                { "path": "lib/document-update.mjs", "kind": "source" },
+                { "path": "lib/refresh.mjs", "kind": "source" }
               ]
             },
             {
               "id": "review",
-              "title": "分析变更",
-              "summary": "在独立 DSH 会话里分析快照，返回要修订的线路和复核说明。",
-              "details": [],
+              "title": "在独立会话分析",
+              "summary": "文档任务完成后，刷新会检查 DSH 返回的补丁和复核说明。",
+              "details": [
+                "临时源码副本和独立 DSH 配置用于 headless 会话，可指定模型 patch 或 DSH CLI。读取 update.json，核对快照 ID、完整变更路径及每条受影响线路的复核说明。按稳定 ID 合并并保留未涉及线路和同 ID 步骤的回流字段。"
+              ],
               "sources": [
                 { "path": "lib/document-session.mjs", "kind": "source" },
-                { "path": "docs/graph-format.md", "kind": "documentation", "line": 32 }
+                { "path": "lib/document-update.mjs", "kind": "source" },
+                { "path": "tests/refresh.test.mjs", "kind": "test" }
               ]
             },
             {
               "id": "publish",
               "title": "发布查看器与文档",
-              "summary": "用户重新打开查看器就能看到新图谱及其 Markdown 文档。",
-              "details": ["发布前再次采集工作树，以确认分析期间的源码快照一致。"],
-              "sources": [{ "path": "lib/refresh.mjs", "kind": "source" }]
+              "summary": "重新加载查看器即可读到新图谱，终端显示 updated 或 reviewed。",
+              "details": [
+                "校验合并图谱并锚定、补充证据，重采工作树确认分析期间源码未变，再发布同一图谱生成的查看器和 Markdown。updated 表示文档或证据定位发生变化，reviewed 表示新快照已复核且上述内容一致。"
+              ],
+              "sources": [
+                { "path": "lib/refresh.mjs", "kind": "source" },
+                { "path": "lib/document-update.mjs", "kind": "source" },
+                { "path": "lib/reader.mjs", "kind": "source" },
+                { "path": "tests/refresh.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "no-analysis",
+              "title": "沿用图谱或重新渲染",
+              "summary": "没有源码变化时，手动刷新显示 unchanged，或在渲染器或索引器变化后显示 rendered。",
+              "details": [
+                "无需启动文档会话。可复用原版或基于原图谱重新补充证据、渲染并发布。watch 在同一失败快照上等待下一次变动。"
+              ],
+              "sources": [
+                { "path": "lib/refresh.mjs", "kind": "source" },
+                { "path": "bin/dsh-threadlight.mjs", "kind": "source" }
+              ]
             },
             {
               "id": "keep-previous",
               "title": "保留上一版",
-              "summary": "终端报告失败原因，用户可继续查看上一次成功发布的图谱。",
-              "details": ["并发修改源码、缺少引用文件等错误都可能使刷新停止。"],
+              "summary": "会话失败、补丁有误或分析中源码变化时，仍可读上次成功发布的图谱。",
+              "details": [
+                "无可读补丁、校验或证据核对失败、发布前快照不一致时停止本次更新。watch 记住失败的快照并等下一次变动，手动 refresh 可重新尝试。"
+              ],
               "sources": [
-                { "path": "lib/refresh.mjs", "kind": "source", "line": 144 },
-                { "path": "tests/refresh.test.mjs", "kind": "test", "line": 133 },
-                { "path": "docs/graph-format.md", "kind": "documentation", "line": 32 },
-                { "path": "README.md", "kind": "documentation", "line": 55 }
+                { "path": "lib/refresh.mjs", "kind": "source" },
+                { "path": "lib/document-session.mjs", "kind": "source" },
+                { "path": "tests/refresh.test.mjs", "kind": "test" }
               ]
             }
           ],
           "edges": [
-            { "from": "capture", "to": "review", "kind": "sequence" },
-            { "from": "review", "to": "publish", "kind": "branch", "label": "补丁校验通过且工作树未变" },
-            { "from": "review", "to": "keep-previous", "kind": "branch", "label": "校验失败或工作树在分析期间变化" }
+            { "from": "capture", "to": "full", "kind": "branch", "label": "存在可采集文件且无上次发布" },
+            { "from": "capture", "to": "affected", "kind": "branch", "label": "已有发布且源码有变更" },
+            { "from": "capture", "to": "no-analysis", "kind": "branch", "label": "无需文档分析，或旧失败快照仍未变" },
+            { "from": "capture", "to": "keep-previous", "kind": "branch", "label": "采集失败或没有可采集的文件" },
+            { "from": "full", "to": "review", "kind": "sequence" },
+            { "from": "affected", "to": "review", "kind": "sequence" },
+            { "from": "review", "to": "publish", "kind": "branch", "label": "补丁、证据与再次采集结果均通过" },
+            { "from": "review", "to": "keep-previous", "kind": "branch", "label": "会话、补丁或发布前的检查失败" },
+            { "from": "keep-previous", "to": "capture", "kind": "branch", "label": "手动重试，或监听检测到变化" }
           ],
+          "layout": {
+            "rows": [
+              ["capture"],
+              ["full", "affected", "no-analysis"],
+              ["review"],
+              ["publish", "keep-previous"]
+            ]
+          },
           "links": [
             { "group": "graph", "flow": "validate", "kind": "uses" },
+            { "group": "evidence", "flow": "anchor", "kind": "uses" },
+            { "group": "versions", "flow": "changelog", "kind": "continues" },
+            { "group": "delivery", "flow": "read", "kind": "continues" }
+          ]
+        },
+        {
+          "id": "web-graph-task",
+          "title": "在 DSH Web 发起图谱任务",
+          "summary": "登记工作区时可生成图谱，工作区列表也可发起更新或重新生成。",
+          "nodes": [
+            {
+              "id": "choose",
+              "title": "选择图谱任务",
+              "summary": "创建工作区时可勾选生成图谱。在支持这些操作的列表项上可以更新或重新生成。",
+              "details": [
+                "工作区创建可附带 generate。列表向 graph-session 发送 update 或 regenerate。重新生成有确认提示，取消会留在列表。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-launch.mjs", "kind": "source" },
+                { "path": "lib/dsh-launch.js", "kind": "source" },
+                { "path": "lib/dsh-review.mjs", "kind": "source" }
+              ]
+            },
+            {
+              "id": "prepare",
+              "title": "准备生成或修订",
+              "summary": "重新生成会先归档当前发布，再开始新的梳理。",
+              "details": [
+                "generate 和 regenerate 要求会话按技能全量整理。update 要求读取现有 .threadlight/graph.json 和 Git 改动，保留稳定 ID 后增量修订。regenerate 在派发前调用重置，锁冲突和权限错误会提示。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-review.mjs", "kind": "source" },
+                { "path": "lib/reset.mjs", "kind": "source" },
+                { "path": "skills/threadlight-map-project/SKILL.md", "kind": "documentation" }
+              ]
+            },
+            {
+              "id": "queue",
+              "title": "打开 DSH 会话查看结果",
+              "summary": "任务接收后可在相应工作区的会话中查看进度，完成后回列表打开可用图谱。",
+              "details": [
+                "普通工作区会话收到提示词，要求写 .threadlight/graph.json 并运行 validate。审阅页有发布状态时优先读取该状态指向的 revision，无状态时才读工作区图谱文件。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-review.mjs", "kind": "source" },
+                { "path": "lib/dsh-launch.js", "kind": "source" },
+                { "path": "tests/dsh-host.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "task-error",
+              "title": "查看任务创建结果",
+              "summary": "列表会提示派发失败，可稍后重试。创建时若未拿到会话，仍会进入已登记的工作区。",
+              "details": [
+                "graph-session 对服务缺失或队列拒收分别报告 503 或 502。创建入口可只返回工作区 ID。重新生成的归档先于任务派发，后续派发失败时归档仍已发生。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-review.mjs", "kind": "source" },
+                { "path": "lib/dsh-launch.js", "kind": "source" }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "choose", "to": "prepare", "kind": "sequence" },
+            { "from": "prepare", "to": "queue", "kind": "branch", "label": "DSH 接收任务" },
+            { "from": "prepare", "to": "task-error", "kind": "branch", "label": "归档或派发未成功" },
+            { "from": "task-error", "to": "choose", "kind": "branch", "label": "返回任务入口后重试" }
+          ],
+          "layout": {
+            "rows": [
+              ["choose"],
+              ["prepare"],
+              ["queue", "task-error"]
+            ]
+          },
+          "links": [
+            { "group": "graph", "flow": "validate", "kind": "uses" },
+            { "group": "versions", "flow": "reset", "kind": "uses" },
             { "group": "delivery", "flow": "read", "kind": "continues" }
           ]
         }
@@ -75,74 +262,1090 @@
       "id": "graph",
       "area": "generation",
       "title": "图谱校验",
-      "summary": "在写出文档前检查图谱结构及其内部引用。",
+      "summary": "CLI、文档更新和导出共用图谱结构校验。",
       "flows": [
         {
           "id": "validate",
           "title": "验证图谱结构",
-          "summary": "检查版本、节点编号、线路关系和分支连线的目标。",
+          "summary": "检查图谱后可在终端查看领域、功能区、线路与步骤计数，或定位首个结构错误。",
           "nodes": [
             {
               "id": "parse",
               "title": "解析并校验 JSON",
-              "summary": "字段或引用有误时报告具体问题，校验通过的图谱可以交给渲染器。",
-              "details": [],
+              "summary": "把图谱文件交给 validate，终端检查其结构和引用。",
+              "details": [
+                "CLI 读取至多 8 MiB 的 UTF-8 文件。图谱校验 schemaVersion、领域归属、稳定 ID、步骤和证据字段、边、布局及跨线路目标。结构校验之外，证据在工作树中的位置由锚定流程核对。"
+              ],
               "sources": [
+                { "path": "bin/dsh-threadlight.mjs", "kind": "source" },
                 { "path": "lib/graph.mjs", "kind": "source" },
-                { "path": "tests/export.test.mjs", "kind": "test" }
+                { "path": "docs/graph-format.md", "kind": "documentation" }
+              ]
+            },
+            {
+              "id": "counts",
+              "title": "查看计数",
+              "summary": "校验通过时，终端打印领域、功能区、线路和步骤的数量。",
+              "details": [
+                "inspectGraph 汇总 areas、groups、flows 和 nodes。带 --json 时在 ok 为 true 的结果中返回 summary。"
+              ],
+              "sources": [
+                { "path": "bin/dsh-threadlight.mjs", "kind": "source" },
+                { "path": "lib/graph.mjs", "kind": "source" },
+                { "path": "tests/graph-validate.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "invalid",
+              "title": "修正首个报错",
+              "summary": "校验失败时终端指出问题，修正输入后可重新运行。",
+              "details": [
+                "退出码为 1。--json 以 error 提供稳定的错误码、字段路径、消息及适用的修复提示，输入读取、大小和编码错误也有对应分类。"
+              ],
+              "sources": [
+                { "path": "bin/dsh-threadlight.mjs", "kind": "source" },
+                { "path": "lib/graph.mjs", "kind": "source" },
+                { "path": "tests/graph-validate.test.mjs", "kind": "test" }
               ]
             }
           ],
-          "edges": []
+          "edges": [
+            { "from": "parse", "to": "counts", "kind": "branch", "label": "结构和引用有效" },
+            { "from": "parse", "to": "invalid", "kind": "branch", "label": "输入或图谱校验失败" },
+            { "from": "invalid", "to": "parse", "kind": "branch", "label": "修正输入后重跑" }
+          ],
+          "layout": {
+            "rows": [
+              ["parse"],
+              ["counts", "invalid"]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "evidence",
+      "area": "generation",
+      "title": "证据锚定与复核",
+      "summary": "为源码位置保存指纹，源码变化后尝试重新定位并显示待复核项。",
+      "flows": [
+        {
+          "id": "anchor",
+          "title": "定位步骤证据",
+          "summary": "检查步骤证据能否在当前快照中定位，并补充可供查看器展示的片段。",
+          "nodes": [
+            {
+              "id": "check-location",
+              "title": "核对引用位置",
+              "summary": "发布前会检查证据文件和适用的行号。",
+              "details": [
+                "在采集快照中查找路径。文件缺失、无有效定位的越界引用或 lineText 与指定行不一致时报告错误。仅有文件路径的有效引用可直接保留。"
+              ],
+              "sources": [
+                { "path": "lib/source-anchors.mjs", "kind": "source" },
+                { "path": "lib/document-update.mjs", "kind": "source" },
+                { "path": "tests/refresh.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "fingerprint",
+              "title": "建立或更新证据锚点",
+              "summary": "有效的行引用可以显示行指纹，源码变动后有机会自动跟随原位置。",
+              "details": [
+                "带行号的证据保存行及相邻上下文的指纹。旧证据优先按在新旧版本中均唯一的上下文重定位，其次使用唯一引用行。"
+              ],
+              "sources": [
+                { "path": "lib/source-anchors.mjs", "kind": "source" },
+                { "path": "docs/graph-format.md", "kind": "documentation" },
+                { "path": "tests/refresh.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "needs-review",
+              "title": "标记证据待复核",
+              "summary": "旧位置无法可靠重找时，列表和源码卡片会保留路径并显示「证据待复核」。",
+              "details": [
+                "宿主移除原行号和指纹并标记 needs-review。下一次分析源码变动时会将这种证据关联到受影响线路，由文档会话核对。"
+              ],
+              "sources": [
+                { "path": "lib/source-anchors.mjs", "kind": "source" },
+                { "path": "lib/document-update.mjs", "kind": "source" },
+                { "path": "lib/reader.html", "kind": "source" }
+              ]
+            },
+            {
+              "id": "enrich",
+              "title": "附加源码片段和可选符号",
+              "summary": "查看器可在源码卡片展开已有的带行号片段，部分 JavaScript 引用还会显示符号。",
+              "details": [
+                "从快照摘取有适用位置的短片段，待复核项跳过。可选 Rust 索引器为受支持的带行号 JavaScript 引用补充函数、调用或导入等符号。"
+              ],
+              "sources": [
+                { "path": "lib/implementation-evidence.mjs", "kind": "source" },
+                { "path": "analyzer/src/main.rs", "kind": "source" },
+                { "path": "lib/reader.html", "kind": "source" }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "check-location", "to": "fingerprint", "kind": "branch", "label": "具备有效的新行引用或可继续核对的旧行引用" },
+            { "from": "check-location", "to": "enrich", "kind": "branch", "label": "保留文件级引用" },
+            { "from": "fingerprint", "to": "enrich", "kind": "branch", "label": "证据定位可靠" },
+            { "from": "fingerprint", "to": "needs-review", "kind": "branch", "label": "旧证据无法唯一定位" }
+          ],
+          "links": [
+            { "group": "delivery", "flow": "read", "kind": "continues" }
+          ]
         }
       ]
     },
     {
       "id": "delivery",
       "area": "publishing",
-      "title": "阅读与导出",
-      "summary": "在 HTML 中查看流程，或把图谱放进 Obsidian。",
+      "title": "查看与文档导出",
+      "summary": "通过功能总览、操作流程和功能关系浏览图谱，或分发相互链接的文档和画布。",
       "flows": [
         {
           "id": "read",
           "title": "在查看器中读图",
-          "summary": "从功能总览进入一条线路，跟随分支找到对应的实现或测试。",
+          "summary": "沿总览找到线路，按记录的步骤和分支导览，再核对证据及关联线路。",
           "nodes": [
             {
               "id": "pick",
-              "title": "从功能区选择线路",
-              "summary": "打开查看器后，用户按用途找到对应的功能和操作入口。",
-              "details": [],
-              "sources": [{ "path": "lib/reader.html", "kind": "source" }]
+              "title": "逐级展开总览",
+              "summary": "打开功能总览后，点击项目和领域分支找到功能区、线路与步骤，也可搜索定位。",
+              "details": [
+                "声明了领域时初始展示项目和领域。搜索展开命中路径，清空搜索恢复手动展开。点击线路标题或步骤可进入操作流程。"
+              ],
+              "sources": [
+                { "path": "lib/reader.html", "kind": "source" },
+                { "path": "tests/reader.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "guide",
+              "title": "跟随操作流程导览",
+              "summary": "选择步骤即可查看连线与分支。开启导览后，可以选下一步、查看走过的路径或返回上一步。",
+              "details": [
+                "从当前步骤开始，仅将存在的出边作为下一步。有多条记录时分别提供选项，无后继时可返回已走路径。可用适应窗口按钮调整流程图。"
+              ],
+              "sources": [
+                { "path": "lib/reader.html", "kind": "source" },
+                { "path": "tests/reader.test.mjs", "kind": "test" }
+              ]
             },
             {
               "id": "inspect",
-              "title": "核对步骤证据",
-              "summary": "点选一个步骤，在详情中查看这一环节的行为、分支及源码位置。",
-              "details": [],
-              "sources": [{ "path": "lib/reader.html", "kind": "source" }]
-            }
-          ],
-          "edges": [{ "from": "pick", "to": "inspect", "kind": "sequence" }]
-        },
-        {
-          "id": "export",
-          "title": "导出 Obsidian 笔记",
-          "summary": "在 CLI 或 DSH 中将图谱转换为相互链接的 Markdown 和 Canvas。",
-          "nodes": [
-            {
-              "id": "write",
-              "title": "生成导出快照",
-              "summary": "校验成功后写入笔记与画布，用户可以在 Obsidian 打开项目总览。",
-              "details": ["完成的同一快照可以复用，用户对既有笔记的编辑会保留。"],
+              "title": "核对步骤状态与证据",
+              "summary": "详情显示「计划」「有实现依据」或「已实际验证」，可打开源码卡片或跳到对应文档。",
+              "details": [
+                "未显式设置时，有证据显示「有实现依据」，无证据显示「计划」。已记录的验证和预期差异随详情展示。SRC 卡片按已有数据展示文件、行号、符号、指纹和带行号片段。普通文件级源码引用会显示暂无源码片段。"
+              ],
               "sources": [
-                { "path": "index.mjs", "kind": "source" },
-                { "path": "lib/obsidian.mjs", "kind": "source" }
+                { "path": "lib/reader.html", "kind": "source" },
+                {
+                  "path": "lib/step-state.mjs",
+                  "kind": "source",
+                  "line": 4,
+                  "preview": {
+                    "startLine": 4,
+                    "text": "export function stepState(node) {\n  return node.state ?? (node.sources.length ? 'implemented' : 'planned')\n}"
+                  }
+                },
+                { "path": "tests/reader.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "relations",
+              "title": "查看功能关系",
+              "summary": "切到功能关系可沿实线查看操作接续，沿虚线查看线路使用关系。",
+              "details": [
+                "从当前线路汇集显式 links 的入向和出向关系，点关联线路可切换。关系为空时页面提示没有记录。"
+              ],
+              "sources": [
+                { "path": "lib/reader.html", "kind": "source" },
+                { "path": "lib/graph.mjs", "kind": "source" },
+                { "path": "tests/reader.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "explain",
+              "title": "查看术语与选文讲解",
+              "summary": "开启新手模式可读术语解释。DSH Web 中选中正文还可询问含义或进一步讲解。",
+              "details": [
+                "优先采用项目术语定义。选文讲解校验正文归属，使用当前 DSH 默认模型和图谱上下文，以纯文本返回，无工具调用。模型失败或超时会显示重试提示。"
+              ],
+              "sources": [
+                { "path": "lib/reader.html", "kind": "source" },
+                { "path": "lib/reader.mjs", "kind": "source" },
+                { "path": "lib/dsh-review.js", "kind": "source" },
+                { "path": "lib/dsh-review.mjs", "kind": "source" }
+              ]
+            },
+            {
+              "id": "visual-export",
+              "title": "保存当前视图",
+              "summary": "可将当前展开和筛选后的拓扑导出为 PNG，也可打印任意当前视图或另存为 PDF。",
+              "details": [
+                "PNG 生成失败时下载 SVG。打印使用浏览器打印功能。可按问号查看快捷键，通过斜杠或 Ctrl/Cmd+K 聚焦当前视图支持的搜索。"
+              ],
+              "sources": [
+                { "path": "lib/reader.html", "kind": "source" },
+                { "path": "tests/reader.test.mjs", "kind": "test" }
               ]
             }
           ],
-          "edges": [],
-          "links": [{ "group": "graph", "flow": "validate", "kind": "uses" }]
+          "edges": [
+            { "from": "pick", "to": "guide", "kind": "branch", "label": "打开线路标题或步骤" },
+            { "from": "pick", "to": "visual-export", "kind": "branch", "label": "导出当前总览或打印" },
+            { "from": "guide", "to": "inspect", "kind": "branch", "label": "查看选中步骤的详情" },
+            { "from": "guide", "to": "relations", "kind": "branch", "label": "切换到功能关系" },
+            { "from": "inspect", "to": "explain", "kind": "branch", "label": "查看术语或在 DSH 请求选文讲解" },
+            { "from": "relations", "to": "guide", "kind": "branch", "label": "回到所选线路的操作流程" },
+            { "from": "guide", "to": "visual-export", "kind": "branch", "label": "打印当前操作流程" },
+            { "from": "relations", "to": "visual-export", "kind": "branch", "label": "打印当前功能关系" }
+          ],
+          "layout": {
+            "rows": [
+              ["pick"],
+              ["guide"],
+              ["inspect", "relations"],
+              ["explain", "visual-export"]
+            ]
+          },
+          "links": [
+            { "group": "annotations", "flow": "edit", "kind": "continues" },
+            { "group": "drafts", "flow": "edit", "kind": "continues" }
+          ]
+        },
+        {
+          "id": "export",
+          "title": "导出项目文档与 Obsidian 笔记",
+          "summary": "用同一份图谱生成离线项目文档，或生成可在 Obsidian 中打开的笔记与 Canvas。",
+          "nodes": [
+            {
+              "id": "choose-format",
+              "title": "选择导出入口",
+              "summary": "使用 view 生成离线查看器与项目文档，使用 export 或 DSH 的 threadlight_export 生成 Obsidian 文件。",
+              "details": [
+                "CLI 从参数指定的 JSON 读入图谱。DSH 工具读取当前会话工作区的 .threadlight/graph.json 并按宿主文件权限写入。无图谱或校验失败时返回错误。"
+              ],
+              "sources": [
+                { "path": "bin/dsh-threadlight.mjs", "kind": "source" },
+                { "path": "index.mjs", "kind": "source" },
+                { "path": "lib/dsh-store.mjs", "kind": "source" }
+              ]
+            },
+            {
+              "id": "reader-docs",
+              "title": "生成查看器与项目文档",
+              "summary": "CLI 返回 index.html 和 project.md，可在功能区文档和图谱步骤之间跳转。",
+              "details": [
+                "view 写入按内容标识的版本目录，同步生成分功能区 Markdown 和 HTML，使用稳定步骤锚点。使用 --source 时核对匹配的工作树快照，可加 --code-index 补符号。快照不匹配或输出冲突会报错。"
+              ],
+              "sources": [
+                { "path": "bin/dsh-threadlight.mjs", "kind": "source" },
+                { "path": "lib/reader.mjs", "kind": "source" },
+                { "path": "tests/refresh.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "write",
+              "title": "生成 Obsidian 快照",
+              "summary": "打开项目总览笔记或 overview.canvas，可浏览领域、功能区以及带分支和重试的线路画布。",
+              "details": [
+                "生成相互链接的 Markdown 与 JSON Canvas，保留步骤块锚点和显式线路关系。按图谱内容和导出格式分目录，最后写入清单。"
+              ],
+              "sources": [
+                { "path": "lib/obsidian.mjs", "kind": "source" },
+                { "path": "tests/export.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "reuse",
+              "title": "复用快照或处理写入冲突",
+              "summary": "重复导出同一图谱可复用已有快照。若残留文件冲突，终端会指出位置。",
+              "details": [
+                "已有完整清单时复用，保留手动编辑的笔记。中断后补齐缺失文件，既存文件内容必须匹配。报告冲突后可换输出目录再导出。"
+              ],
+              "sources": [
+                { "path": "lib/obsidian.mjs", "kind": "source" },
+                { "path": "tests/export.test.mjs", "kind": "test" }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "choose-format", "to": "reader-docs", "kind": "branch", "label": "选择 view" },
+            { "from": "choose-format", "to": "write", "kind": "branch", "label": "选择 Obsidian 导出" },
+            { "from": "write", "to": "reuse", "kind": "branch", "label": "发现已有快照或部分文件" },
+            { "from": "reuse", "to": "choose-format", "kind": "branch", "label": "处理冲突后重新导出" }
+          ],
+          "layout": {
+            "rows": [
+              ["choose-format"],
+              ["reader-docs", "write"],
+              ["reuse"]
+            ]
+          },
+          "links": [
+            { "group": "graph", "flow": "validate", "kind": "uses" },
+            { "group": "evidence", "flow": "anchor", "kind": "uses" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "versions",
+      "area": "publishing",
+      "title": "发布历史与变动日志",
+      "summary": "查看不同发布版之间的变化，必要时归档后重新开始生成。",
+      "flows": [
+        {
+          "id": "changelog",
+          "title": "查看发布历史和变动日志",
+          "summary": "用 changelog 查看最近发布的变化，或指定两个版本比较。",
+          "nodes": [
+            {
+              "id": "record",
+              "title": "记录成功发布",
+              "summary": "每次成功发布后，新版本可供后续变动日志使用。",
+              "details": [
+                "refresh 或 report 在写入查看器和状态后追加 history.json，同一 revision 只保留一条。按发布时间保留最近 200 条，并记录适用的快照和会话。"
+              ],
+              "sources": [
+                { "path": "lib/refresh.mjs", "kind": "source" },
+                { "path": "lib/implementation-report.mjs", "kind": "source" },
+                { "path": "tests/graph-changelog.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "select",
+              "title": "选择需要比较的版本",
+              "summary": "默认比较最近 5 对连续发布，也可通过 --from 和 --to 指定两个现存版本。",
+              "details": [
+                "默认按发布历史排序，历史缺失或无效时回退到修订目录修改时间。显式版本不存在时报告错误。"
+              ],
+              "sources": [
+                { "path": "bin/dsh-threadlight.mjs", "kind": "source" },
+                { "path": "tests/graph-changelog.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "compare",
+              "title": "检查各级变动",
+              "summary": "日志指出领域、功能区、线路或步骤的增删改，也可看到证据、步骤状态和验证记录的变化。",
+              "details": [
+                "按稳定 ID 比较层级与验证记录。证据先匹配路径、类型、行号，再对同一文件和类型的剩余引用配对。"
+              ],
+              "sources": [
+                { "path": "lib/graph-changelog.mjs", "kind": "source" },
+                { "path": "tests/graph-changelog.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "show",
+              "title": "读取 Markdown 或 JSON",
+              "summary": "默认终端输出中文 Markdown，并写入 changes.md。带 --format json 时输出差异数组。",
+              "details": [
+                "Markdown 写入与发布共用锁。JSON 模式直接比较并输出结果，可从 orderSource 区分历史、目录时间及显式版本。"
+              ],
+              "sources": [
+                { "path": "bin/dsh-threadlight.mjs", "kind": "source" },
+                { "path": "lib/graph-changelog.mjs", "kind": "source" },
+                { "path": "tests/graph-changelog.test.mjs", "kind": "test" }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "record", "to": "select", "kind": "sequence" },
+            { "from": "select", "to": "compare", "kind": "sequence" },
+            { "from": "compare", "to": "show", "kind": "sequence" }
+          ]
+        },
+        {
+          "id": "reset",
+          "title": "归档当前发布并重置",
+          "summary": "用 CLI 的 reset 归档，或在 Web 确认重新生成时先归档发布。",
+          "nodes": [
+            {
+              "id": "request",
+              "title": "发起重置",
+              "summary": "从终端运行 reset，或在工作区列表确认重新生成。",
+              "details": [
+                "重置与 refresh 和 report 共用发布锁。发布正忙时提示稍后重试，Web 检查当前工作区写权限。"
+              ],
+              "sources": [
+                { "path": "bin/dsh-threadlight.mjs", "kind": "source" },
+                { "path": "lib/reset.mjs", "kind": "source" },
+                { "path": "lib/dsh-review.mjs", "kind": "source" },
+                { "path": "lib/dsh-launch.js", "kind": "source" }
+              ]
+            },
+            {
+              "id": "archive",
+              "title": "检查归档回执",
+              "summary": "CLI 返回归档目录、实际移动项和下一步 refresh。没有可归档项时 archived 为 null。",
+              "details": [
+                "按 UTC 时间戳归档 state.json、viewer.html、revisions、history.json、changes.md。草稿、批注及其提交记录、实现报告、Obsidian 导出和工作区图谱文件仍在原处。归档移动失败时尝试回滚。"
+              ],
+              "sources": [
+                { "path": "lib/reset.mjs", "kind": "source" },
+                { "path": "README.md", "kind": "documentation" },
+                { "path": "tests/refresh.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "retry",
+              "title": "查看重置错误",
+              "summary": "遇到发布占锁或目录问题会看到错误，可等发布结束或修正目录后重试。",
+              "details": [
+                "重置失败返回错误。若回滚未完全成功，错误会指出需要检查的归档目录。"
+              ],
+              "sources": [
+                { "path": "lib/reset.mjs", "kind": "source" },
+                { "path": "lib/dsh-review.mjs", "kind": "source" }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "request", "to": "archive", "kind": "branch", "label": "获取锁并完成检查与归档" },
+            { "from": "request", "to": "retry", "kind": "branch", "label": "锁、目录或归档操作出错" },
+            { "from": "retry", "to": "request", "kind": "branch", "label": "发布结束或目录问题已处理" }
+          ],
+          "layout": {
+            "rows": [
+              ["request"],
+              ["archive", "retry"]
+            ]
+          },
+          "links": [
+            { "group": "documentation", "flow": "refresh", "kind": "continues" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "workspace",
+      "area": "publishing",
+      "title": "DSH Web 集成",
+      "summary": "通过 DSH 侧栏或会话顶栏进入项目，在 See 和 Shape 中创建、选择和切换工作区。",
+      "flows": [
+        {
+          "id": "enter",
+          "title": "从 DSH 进入工作区",
+          "summary": "从 Threadlight 面板选择项目，或用会话顶栏定位当前项目及批注箱。",
+          "nodes": [
+            {
+              "id": "panel",
+              "title": "打开侧栏或会话顶栏",
+              "summary": "DSH 侧栏可打开 Threadlight，当前会话顶栏的 Threadlight 按钮可进入该项目的批注箱。",
+              "details": [
+                "客户端记录最近的会话标识，宿主按会话归属解析工作区。也可直接进入 /threadlight/。顶栏入口依赖宿主提供对应插槽。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-client.js", "kind": "source" },
+                { "path": "lib/dsh-review.mjs", "kind": "source" },
+                { "path": "index.mjs", "kind": "source" }
+              ]
+            },
+            {
+              "id": "see",
+              "title": "用 See 创建工作区",
+              "summary": "选择现有目录，或在目录能力允许时创建新目录。工作区名称可省略。",
+              "details": [
+                "有系统选择器时由选择器完成选目录。具备网页目录创建能力时可提交有效父目录和单个目录名。目录无效或登记失败时显示错误。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-launch.mjs", "kind": "source" },
+                { "path": "lib/dsh-launch.js", "kind": "source" },
+                { "path": "lib/dsh-review.mjs", "kind": "source" }
+              ]
+            },
+            {
+              "id": "shape",
+              "title": "用 Shape 查找工作区",
+              "summary": "可以按名称或路径搜索，按状态筛选，然后打开目标项目。",
+              "details": [
+                "列表区分图谱、可编辑草稿、异常及不可用等状态。目录或状态读取异常会反映到列表。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-launch.mjs", "kind": "source" },
+                { "path": "lib/dsh-launch.js", "kind": "source" },
+                { "path": "lib/dsh-review.mjs", "kind": "source" }
+              ]
+            },
+            {
+              "id": "open",
+              "title": "进入图谱或草稿",
+              "summary": "已有可读图谱的工作区进入图谱，尚无图谱的可用工作区打开草稿。",
+              "details": [
+                "审阅路由优先读取发布 revision，无发布状态时尝试读取工作区图谱。会话顶栏请求批注箱但项目没有图谱时会提示。不可用的工作区会回到列表。可从图谱或草稿切换工作区。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-review.mjs", "kind": "source" },
+                { "path": "lib/dsh-launch.mjs", "kind": "source" },
+                { "path": "tests/dsh-host.test.mjs", "kind": "test" }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "panel", "to": "see", "kind": "branch", "label": "从启动页进入 See" },
+            { "from": "panel", "to": "shape", "kind": "branch", "label": "从启动页进入 Shape" },
+            { "from": "panel", "to": "open", "kind": "branch", "label": "会话或已保存的目标可解析到项目" },
+            { "from": "see", "to": "open", "kind": "branch", "label": "已登记且进入工作区" },
+            { "from": "shape", "to": "open", "kind": "branch", "label": "选择可用的工作区" }
+          ],
+          "links": [
+            { "group": "documentation", "flow": "web-graph-task", "kind": "continues" },
+            { "group": "annotation-tasks", "flow": "submit", "kind": "continues" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "annotations",
+      "area": "review",
+      "title": "图谱批注",
+      "summary": "在 DSH 查看器给功能区、线路、步骤和选中文段添加可追溯的反馈。",
+      "flows": [
+        {
+          "id": "edit",
+          "title": "记录和维护图谱批注",
+          "summary": "从图谱打开批注，保存正文或引用，并对已有批注修改或删除。",
+          "nodes": [
+            {
+              "id": "target",
+              "title": "打开模块、线路或步骤的批注",
+              "summary": "在功能区标题、线路标题、步骤卡片或步骤详情标题右键，可打开对应批注。",
+              "details": [
+                "审阅菜单解析当前功能区及线路、步骤 ID，对话框仅显示该目标的批注。功能区还可用模块批注按钮进入。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-review.js", "kind": "source" },
+                { "path": "lib/reader.html", "kind": "source" },
+                { "path": "tests/reader.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "quote",
+              "title": "批注选中文段",
+              "summary": "在线路介绍、步骤卡片或步骤详情选中文字，再选「批注所选文字」，原文会显示在批注中。",
+              "details": [
+                "选区与对应线路或步骤关联。服务端接受最长 3000 字的引用，并保留原文空白和换行。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-review.js", "kind": "source" },
+                { "path": "lib/dsh-review.mjs", "kind": "source" },
+                { "path": "docs/graph-format.md", "kind": "documentation" }
+              ]
+            },
+            {
+              "id": "save",
+              "title": "保存新批注",
+              "summary": "输入正文并保存后，新批注显示在对应目标的列表。",
+              "details": [
+                "为正文、可选引用和图谱摘要生成记录，保存在 .threadlight/annotations/<功能区 ID>/<UUID>.json。图谱刷新保留文件。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-review.mjs", "kind": "source" },
+                { "path": "lib/dsh-review.js", "kind": "source" },
+                { "path": "tests/reader.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "revise",
+              "title": "修改或删除已有批注",
+              "summary": "可修改批注正文或删除该条批注。修改保留原引用和归属。",
+              "details": [
+                "PATCH 更新正文及修改时间。DELETE 在检查写权限及路径后删除记录。两种操作按批注串行，避免编辑恢复已删除的批注。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-review.mjs", "kind": "source" },
+                { "path": "lib/dsh-review.js", "kind": "source" },
+                { "path": "tests/reader.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "recover",
+              "title": "处理批注操作失败",
+              "summary": "页面提示图谱已更新、批注已不存在或没有写权限等具体原因。",
+              "details": [
+                "当前图谱摘要不匹配返回 409，记录缺失返回 404，只读等权限错误返回 403。图谱变化后重新加载，批注冲突后重新打开目标。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-review.mjs", "kind": "source" },
+                { "path": "lib/dsh-review.js", "kind": "source" }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "target", "to": "quote", "kind": "branch", "label": "在流程正文中选择了文字" },
+            { "from": "target", "to": "save", "kind": "branch", "label": "新增普通批注" },
+            { "from": "target", "to": "revise", "kind": "branch", "label": "对已有批注选择修改或删除" },
+            { "from": "quote", "to": "save", "kind": "sequence" },
+            { "from": "save", "to": "recover", "kind": "branch", "label": "新增失败" },
+            { "from": "revise", "to": "recover", "kind": "branch", "label": "修改或删除失败" },
+            { "from": "recover", "to": "target", "kind": "branch", "label": "重新加载或重新打开目标后重试" }
+          ],
+          "layout": {
+            "rows": [
+              ["target"],
+              ["quote"],
+              ["save", "revise"],
+              ["recover"]
+            ]
+          },
+          "links": [
+            { "group": "annotation-tasks", "flow": "submit", "kind": "continues" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "annotation-tasks",
+      "area": "review",
+      "title": "批注箱与 DSH 直提",
+      "summary": "从多个功能区收集反馈，或从当前批注目标直接发起代码修改任务。",
+      "flows": [
+        {
+          "id": "submit",
+          "title": "把批注直接提交给 DSH",
+          "summary": "可在批注箱跨功能区勾选，也可提交当前目标的全部已保存批注。",
+          "nodes": [
+            {
+              "id": "collect",
+              "title": "打开批注箱或当前目标",
+              "summary": "图谱顶栏的批注箱按功能区汇总批注。批注对话框可提交当前目标的已保存批注。",
+              "details": [
+                "批注箱返回正文、引用、目标、时间和最近有效回执，找不到标题时显示对应 ID。对话框提交当前目标已有记录。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-notes.js", "kind": "source" },
+                { "path": "lib/dsh-review.js", "kind": "source" },
+                { "path": "lib/dsh-review.mjs", "kind": "source" },
+                { "path": "tests/reader.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "select",
+              "title": "选择并核对要提交的批注",
+              "summary": "批注箱可逐条或按功能区全选，每次可提交 1 至 100 条。",
+              "details": [
+                "服务端核对 ID、工作区、图谱摘要和目标。缺失批注返回 404，批注所属图谱已变化返回 409，目标失效返回错误。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-notes.js", "kind": "source" },
+                { "path": "lib/dsh-review.mjs", "kind": "source" },
+                { "path": "lib/annotation-task.mjs", "kind": "source" }
+              ]
+            },
+            {
+              "id": "queue",
+              "title": "将编号反馈交给工作区会话",
+              "summary": "提交后，可在当前工作区的普通 DSH 会话中查看按编号整理的反馈与执行进度。",
+              "details": [
+                "提示词包含项目、工作区、图谱摘要、目标、正文、引用及相关源码位置，并要求逐条报告改动位置、实际验证和未决事项。"
+              ],
+              "sources": [
+                { "path": "lib/annotation-task.mjs", "kind": "source" },
+                { "path": "tests/annotation-task.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "receipt",
+              "title": "查看幂等回执",
+              "summary": "批注显示已提交和会话标识。同一组再次提交会返回原会话。",
+              "details": [
+                "对去重及排序后的 UUID 集合算摘要，顺序和正文编辑不改变提交标识。成功受理后持久化回执，批注箱忽略待派发和损坏的回执文件。"
+              ],
+              "sources": [
+                {
+                  "path": "lib/annotation-task.mjs",
+                  "kind": "source",
+                  "line": 20,
+                  "preview": {
+                    "startLine": 20,
+                    "text": "export function selectionDigest(noteIds) {\n  return createHash('sha256').update(JSON.stringify(selectedIds(noteIds))).digest('hex')\n}"
+                  }
+                },
+                { "path": "lib/dsh-notes.js", "kind": "source" },
+                { "path": "tests/annotation-task.test.mjs", "kind": "test" }
+              ],
+              "state": "verified",
+              "verification": [
+                {
+                  "id": "annotation-retry-tests",
+                  "at": "2026-11-23T01:11:15.061Z",
+                  "result": "passed",
+                  "summary": "本地测试通过同组并发与重复提交复用回执、拒收后复用请求以及回执索引场景。",
+                  "command": "node --test tests/annotation-task.test.mjs tests/flow-draft.test.mjs tests/graph-validate.test.mjs"
+                }
+              ]
+            },
+            {
+              "id": "retry",
+              "title": "处理选择错误或派发失败",
+              "summary": "缺失、图谱过期或 DSH 拒收会显示错误。DSH 拒收后批注仍已保存，可重试同一组。",
+              "details": [
+                "拒收返回 502，待派发记录持有原会话 ID、请求 ID 和提示词供重试。当前 DSH 缺少会话提交能力时返回 503。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-review.mjs", "kind": "source" },
+                { "path": "lib/annotation-task.mjs", "kind": "source" },
+                { "path": "tests/annotation-task.test.mjs", "kind": "test" }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "collect", "to": "select", "kind": "sequence" },
+            { "from": "select", "to": "queue", "kind": "branch", "label": "选择有效且没有已完成回执" },
+            { "from": "select", "to": "receipt", "kind": "branch", "label": "提交能力可用且存在同组有效回执" },
+            { "from": "select", "to": "retry", "kind": "branch", "label": "批注、图谱或目标校验失败" },
+            { "from": "queue", "to": "receipt", "kind": "branch", "label": "DSH 已接收" },
+            { "from": "queue", "to": "retry", "kind": "branch", "label": "DSH 拒收或提交不可用" },
+            { "from": "retry", "to": "queue", "kind": "branch", "label": "DSH 恢复后重试同一组待派发任务" },
+            { "from": "retry", "to": "select", "kind": "branch", "label": "修正选择或刷新图谱后重新提交" }
+          ],
+          "layout": {
+            "rows": [
+              ["collect"],
+              ["select"],
+              ["queue"],
+              ["receipt", "retry"]
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "drafts",
+      "area": "implementation",
+      "title": "流程草稿与提交",
+      "summary": "创建或复制一条线路，在画布中修改流程，保存版本并交给 DSH。",
+      "flows": [
+        {
+          "id": "edit",
+          "title": "绘制并保存流程草稿",
+          "summary": "从已有线路复制或建立空白草稿，在画布编辑步骤、连线、布局和随任务批注。",
+          "nodes": [
+            {
+              "id": "start",
+              "title": "新建或从线路建立草稿",
+              "summary": "打开流程草稿可新建线路，从已有图谱点「从此线路建草稿」可带入原流程。",
+              "details": [
+                "复制时保留原步骤 ID、线路标识、原图谱摘要和证据作为基线。首次保存时，如果原图谱摘要已变，需要重新从线路建草稿。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-review.js", "kind": "source" },
+                { "path": "lib/dsh-drafts.mjs", "kind": "source" },
+                { "path": "lib/flow-draft.mjs", "kind": "source" }
+              ]
+            },
+            {
+              "id": "diagram",
+              "title": "编辑步骤、连线与布局",
+              "summary": "可增删步骤、拖动连接点连线、调整线端和折线，或用表单编辑。可拖动步骤和恢复自动布局。",
+              "details": [
+                "随插件打包的 maxGraph 渲染画布。手动位置与折线点随计划保存。可收起线路设置和编辑详情以扩大画布。连线需要有效端点，重复连线会提示。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-drafts.js", "kind": "source" },
+                { "path": "lib/dsh-drafts.html", "kind": "source" },
+                { "path": "src/draft-diagram.js", "kind": "source" },
+                { "path": "lib/flow-draft.mjs", "kind": "source" }
+              ]
+            },
+            {
+              "id": "feedback",
+              "title": "为草稿写批注",
+              "summary": "可针对整条线路、步骤或连线写批注，并勾选「随任务提交」。",
+              "details": [
+                "草稿批注与图谱批注分别存储。计划保存批注原文和目标，提示词提取已选条目。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-drafts.js", "kind": "source" },
+                { "path": "lib/flow-draft.mjs", "kind": "source" },
+                { "path": "tests/flow-draft.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "save",
+              "title": "保存或重新打开版本",
+              "summary": "保存改动会增加版本号。草稿列表可打开最新版本继续编辑。",
+              "details": [
+                "草稿按 .threadlight/drafts/<草稿 ID>/<版本>.json 追加。内容未变时复用当前版本，响应丢失后重传相同保存可返回已写入的版本。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-drafts.mjs", "kind": "source" },
+                { "path": "lib/dsh-drafts.js", "kind": "source" },
+                { "path": "docs/graph-format.md", "kind": "documentation" }
+              ]
+            },
+            {
+              "id": "conflict",
+              "title": "处理版本冲突",
+              "summary": "其他页面已保存新版时，会提示重新打开最新草稿。",
+              "details": [
+                "版本与存储不一致或并发写入返回 409。先重新打开最新版本，再按需要编辑和保存。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-drafts.mjs", "kind": "source" },
+                { "path": "lib/dsh-drafts.js", "kind": "source" }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "start", "to": "diagram", "kind": "branch", "label": "需要绘制或调整流程" },
+            { "from": "start", "to": "feedback", "kind": "branch", "label": "直接记录线路反馈" },
+            { "from": "diagram", "to": "feedback", "kind": "branch", "label": "需要给步骤或连线补批注" },
+            { "from": "diagram", "to": "save", "kind": "branch", "label": "已完成本轮编辑" },
+            { "from": "feedback", "to": "save", "kind": "sequence" },
+            { "from": "save", "to": "conflict", "kind": "branch", "label": "当前版本冲突" },
+            { "from": "conflict", "to": "start", "kind": "branch", "label": "重新打开最新草稿后继续" }
+          ],
+          "layout": {
+            "rows": [
+              ["start"],
+              ["diagram"],
+              ["feedback"],
+              ["save"],
+              ["conflict"]
+            ]
+          },
+          "links": [
+            { "group": "drafts", "flow": "submit", "kind": "continues" }
+          ]
+        },
+        {
+          "id": "submit",
+          "title": "把草稿提交给 DSH",
+          "summary": "填好线路名称，把指定版本和选中的批注交给 DSH，之后从工作区会话查看进度。",
+          "nodes": [
+            {
+              "id": "check",
+              "title": "检查提交条件",
+              "summary": "线路名称必填。目标、验收条件、步骤名称和说明、分支条件都可留空。",
+              "details": [
+                "点击提交时检查名称和最低内容要求。允许至少一个步骤，或无步骤但有选中的线路批注。草稿尚未保存或有修改时先保存。会话服务缺失时界面禁用提交，草稿仍可保存。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-drafts.js", "kind": "source" },
+                { "path": "lib/dsh-drafts.mjs", "kind": "source" },
+                { "path": "lib/flow-draft.mjs", "kind": "source" },
+                { "path": "tests/flow-draft.test.mjs", "kind": "test" }
+              ],
+              "state": "verified",
+              "verification": [
+                {
+                  "id": "draft-submit-tests",
+                  "at": "2026-11-23T01:11:15.061Z",
+                  "result": "passed",
+                  "summary": "本地测试覆盖名称先校验、可留空字段以及无步骤但含选中批注的提示词。",
+                  "command": "node --test tests/annotation-task.test.mjs tests/flow-draft.test.mjs tests/graph-validate.test.mjs"
+                }
+              ]
+            },
+            {
+              "id": "fix",
+              "title": "补齐提交所需信息",
+              "summary": "条件不满足时，界面提示补线路名称、步骤或随任务提交的批注。",
+              "details": [
+                "检查在派发前执行。仅有未选中的批注时需要勾选适用的线路批注，或者添加一个步骤。旧草稿版本需重新打开最新版。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-drafts.js", "kind": "source" },
+                { "path": "lib/flow-draft.mjs", "kind": "source" },
+                { "path": "lib/dsh-drafts.mjs", "kind": "source" }
+              ]
+            },
+            {
+              "id": "prompt",
+              "title": "整理实现需求或用户反馈",
+              "summary": "发送的任务包含流程内容、选中批注原话和可用的原线路证据。",
+              "details": [
+                "有步骤时构建实现任务，并在有基线时附线路差异。只有批注时生成反馈任务，提示词中临时用「用户反馈」步骤承载批注。留空字段会用待补文字表示。"
+              ],
+              "sources": [
+                { "path": "lib/flow-draft.mjs", "kind": "source" },
+                { "path": "lib/implementation-prompt.mjs", "kind": "source" },
+                { "path": "tests/flow-draft.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "dispatch",
+              "title": "派发当前草稿版本",
+              "summary": "草稿任务进入同一工作区的普通 DSH 会话，可在会话列表里查看。",
+              "details": [
+                "保存待派发记录后创建会话并发送提示词。以工作区、草稿 ID 和版本协调并发提交。DSH 拒收则保留草稿和待派发记录。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-drafts.mjs", "kind": "source" },
+                { "path": "lib/dsh-review.mjs", "kind": "source" }
+              ]
+            },
+            {
+              "id": "receipt",
+              "title": "查看草稿提交回执",
+              "summary": "页面显示已提交版本和会话。再次提交同一已受理版本会返回原会话。",
+              "details": [
+                "DSH 接收后保存 submitted-<版本>.json。回执记录会话 ID 和接收时间，工作区会话继续显示任务执行和验证进度。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-drafts.mjs", "kind": "source" },
+                { "path": "lib/dsh-drafts.js", "kind": "source" },
+                { "path": "tests/dsh-host.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "retry",
+              "title": "重试未接收的任务",
+              "summary": "如果 DSH 暂未接收，页面会提示草稿已保存，可重新提交该版本。",
+              "details": [
+                "待派发记录复用会话和请求 ID。宿主可检查是否已排队，或通过相同请求 ID 去重。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-drafts.mjs", "kind": "source" },
+                { "path": "docs/graph-format.md", "kind": "documentation" }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "check", "to": "fix", "kind": "branch", "label": "缺名称或缺少步骤和已选线路批注" },
+            { "from": "check", "to": "prompt", "kind": "branch", "label": "符合提交条件且版本已保存" },
+            { "from": "fix", "to": "check", "kind": "branch", "label": "补齐后重新提交" },
+            { "from": "prompt", "to": "dispatch", "kind": "sequence" },
+            { "from": "dispatch", "to": "receipt", "kind": "branch", "label": "DSH 已接收或已有回执" },
+            { "from": "dispatch", "to": "retry", "kind": "branch", "label": "DSH 暂未接收" },
+            { "from": "retry", "to": "dispatch", "kind": "branch", "label": "重试同一已保存版本" }
+          ],
+          "layout": {
+            "rows": [
+              ["check"],
+              ["prompt", "fix"],
+              ["dispatch"],
+              ["receipt", "retry"]
+            ]
+          },
+          "links": [
+            { "group": "implementation-report", "flow": "report", "kind": "continues" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "implementation-report",
+      "area": "implementation",
+      "title": "实现回流",
+      "summary": "实现会话按步骤记录结果，CLI 校验后把证据、状态和验证挂回已发布图谱。",
+      "flows": [
+        {
+          "id": "report",
+          "title": "将实现报告写回图谱",
+          "summary": "实现结束后运行 report，把匹配步骤的实现结果写回。随后可运行 refresh 审阅源码改动。",
+          "nodes": [
+            {
+              "id": "write-report",
+              "title": "在实现会话写报告",
+              "summary": "提交有步骤的草稿后，DSH 会收到实现报告的路径和格式。从已发布线路复制的草稿具有报告回挂所需的基线。",
+              "details": [
+                "提示词要求会话写 .threadlight/implementation/<草稿 ID>/<版本>.json，记录草稿步骤 ID、源码位置、实际执行的验证和预期差异。只有批注的草稿会话省略步骤报告要求。"
+              ],
+              "sources": [
+                { "path": "lib/implementation-prompt.mjs", "kind": "source" },
+                { "path": "lib/dsh-review.mjs", "kind": "source" },
+                { "path": "tests/implementation-report.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "discover",
+              "title": "运行 report 查找匹配记录",
+              "summary": "实现会话结束后运行 report，终端列出已应用、跳过和拒绝的报告。",
+              "details": [
+                "在发布锁内扫描 UUID 和版本对应的报告，匹配草稿版本、接收回执及已发布的 refresh 图谱。已应用且摘要相同的报告跳过。"
+              ],
+              "sources": [
+                { "path": "bin/dsh-threadlight.mjs", "kind": "source" },
+                { "path": "lib/implementation-report.mjs", "kind": "source" },
+                { "path": "tests/implementation-report.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "validate",
+              "title": "校验报告并匹配步骤",
+              "summary": "有效结果按步骤挂回原线路。当前图谱缺失的步骤列在 skippedSteps 中。",
+              "details": [
+                "校验身份、时间、草稿步骤 ID、证据及状态结构。verified 需要至少一条实际通过的 verification。按基线线路与稳定步骤 ID 匹配，缺失步骤可以跳过，其余有效步骤可继续。"
+              ],
+              "sources": [
+                { "path": "lib/implementation-report.mjs", "kind": "source" },
+                { "path": "lib/graph.mjs", "kind": "source" },
+                { "path": "docs/graph-format.md", "kind": "documentation" }
+              ]
+            },
+            {
+              "id": "publish",
+              "title": "发布步骤状态和验证记录",
+              "summary": "重新打开查看器和项目文档，可看到更新的步骤证据、验证结果和与预期的差异。",
+              "details": [
+                "按当前工作树重新锚定证据，支持 --code-index。在快照一致时发布新版本并保存应用摘要。只更新原 state 的 revision，保留 refresh 的源码基线与文档会话记录。"
+              ],
+              "sources": [
+                { "path": "lib/implementation-report.mjs", "kind": "source" },
+                { "path": "lib/source-anchors.mjs", "kind": "source" },
+                { "path": "lib/reader.mjs", "kind": "source" },
+                { "path": "tests/implementation-report.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "fix",
+              "title": "读取跳过或拒绝的原因",
+              "summary": "缺少对应草稿、回执、基线或可匹配步骤时会跳过。无效报告会显示拒绝原因。",
+              "details": [
+                "有拒绝项时 CLI 退出码为 1。修正过的报告摘要改变后可重跑。源码在回流中变动时，命令报错并要求按新快照重试。"
+              ],
+              "sources": [
+                { "path": "lib/implementation-report.mjs", "kind": "source" },
+                { "path": "bin/dsh-threadlight.mjs", "kind": "source" },
+                { "path": "tests/implementation-report.test.mjs", "kind": "test" }
+              ]
+            },
+            {
+              "id": "refresh",
+              "title": "继续审阅实现产生的源码变化",
+              "summary": "回流后运行 refresh，可把本地实现改动反映到项目文档。",
+              "details": [
+                "文档补丁在 group、flow、node ID 都相同时保留回流字段。回流证据仍由当前工作树和锚定规则处理。"
+              ],
+              "sources": [
+                { "path": "lib/document-update.mjs", "kind": "source" },
+                { "path": "lib/refresh.mjs", "kind": "source" },
+                { "path": "tests/implementation-report.test.mjs", "kind": "test" }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "write-report", "to": "discover", "kind": "sequence" },
+            { "from": "discover", "to": "validate", "kind": "branch", "label": "有未应用或已修改的报告及有效记录" },
+            { "from": "discover", "to": "fix", "kind": "branch", "label": "无须应用、缺少配套记录或报告读取失败" },
+            { "from": "validate", "to": "publish", "kind": "branch", "label": "有可匹配步骤且发布前工作树一致" },
+            { "from": "validate", "to": "fix", "kind": "branch", "label": "校验失败、无匹配步骤或发布前工作树变动" },
+            { "from": "fix", "to": "discover", "kind": "branch", "label": "修正报告、补齐依赖或工作树稳定后重试" },
+            { "from": "publish", "to": "refresh", "kind": "sequence" }
+          ],
+          "layout": {
+            "rows": [
+              ["write-report"],
+              ["discover"],
+              ["validate"],
+              ["publish", "fix"],
+              ["refresh"]
+            ]
+          },
+          "links": [
+            { "group": "evidence", "flow": "anchor", "kind": "uses" },
+            { "group": "versions", "flow": "changelog", "kind": "continues" },
+            { "group": "documentation", "flow": "refresh", "kind": "continues" }
+          ]
         }
       ]
     }

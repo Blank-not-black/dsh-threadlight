@@ -137,7 +137,7 @@ test('graph validates optional areas and global group identity', () => {
   const parse = () => parseGraph(JSON.stringify(graph))
   assert.deepEqual(parse(), graph)
   graph.groups[0].area = 'delivery'
-  assert.throws(parse, /^Error: Invalid graph: .*\.area is not allowed/)
+  assert.throws(parse, { message: /^Invalid graph: .*\.area is not allowed/ })
   graph.project.areas = []
   assert.throws(parse, /\.area is not allowed/)
   delete graph.groups[0].area

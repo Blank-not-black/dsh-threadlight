@@ -25,22 +25,37 @@ function graphWithAreas() {
   return parseGraph(JSON.stringify(graph))
 }
 
+function graphWithEvidence() {
+  const graph = JSON.parse(raw)
+  const node = graph.groups[0].flows[0].nodes[0]
+  node.sources = [
+    { path: 'lib/graph.mjs', kind: 'source', line: 10,
+      anchor: { lineHash: 'a'.repeat(64), contextHash: 'b'.repeat(64), unique: true, contextUnique: true },
+      symbol: { kind: 'function', name: 'parseGraph', startLine: 10, endLine: 12 },
+      preview: { startLine: 9, text: '// 校验\nexport function parseGraph() {}' } },
+    { path: 'tests/graph.test.mjs', kind: 'test', status: 'needs-review' },
+    { path: 'README.md', kind: 'documentation' },
+  ]
+  return parseGraph(JSON.stringify(graph))
+}
+
 // Run the shipped scripts with the DOM operations needed by the overview and review menu.
 function loadOverview(graph, { review = false, clientHeight = 320, reply = () => ({ answer: 'test' }),
-  confirm = () => true } = {}) {
+  confirm = () => true, view = '#overview', mobile = false } = {}) {
   const page = renderReader(graph, review ? { review: { workspace: 'test', digest: 'test', nonce: 'test' } } : {})
   let reviewCurrent, selection
   class Element {
     attributes = new Map()
     children = []
     dataset = {}
-    style = {}
+    style = { setProperty(key, value) { this[key] = value }, removeProperty(key) { delete this[key] } }
     listeners = new Map()
     textContent = ''
     value = ''
     nodeType = 1
 
     constructor(tagName) { this.tagName = tagName }
+    get isConnected() { return document.contains(this) }
     get firstElementChild() { return this.children[0] }
     get nextElementSibling() {
       const siblings = this.parentElement?.children
@@ -99,6 +114,8 @@ function loadOverview(graph, { review = false, clientHeight = 320, reply = () =>
       return { left, top, width, height, right: left + width, bottom: top + height }
     }
     matches(selector) {
+      if (selector.includes(',')) return selector.split(',').some(name => this.matches(name.trim()))
+      if (selector === 'dialog[open]') return this.tagName === 'dialog' && this.open
       const data = /^\[data-([a-z-]+)\]$/.exec(selector)
       if (data) return data[1].replace(/-([a-z])/g, (_, letter) => letter.toUpperCase()) in this.dataset
       if (selector.startsWith('.')) return (this.className ?? '').split(' ').includes(selector.slice(1))
@@ -120,6 +137,7 @@ function loadOverview(graph, { review = false, clientHeight = 320, reply = () =>
     dispatch(type, fields = {}) {
       const event = { target: this, defaultPrevented: false, preventDefault() { this.defaultPrevented = true }, ...fields }
       for (let element = this; element; element = element.parentElement) {
+        event.currentTarget = element
         for (const listener of element.listeners.get(type) ?? []) listener(event)
       }
       return event
@@ -132,15 +150,21 @@ function loadOverview(graph, { review = false, clientHeight = 320, reply = () =>
       this.dispatch('focusin', { relatedTarget: previous })
     }
     click() {
+      if (this.disabled) return
       this.focus()
       this.dispatch('click', { detail: 1 })
     }
-    press(key) {
-      const event = this.dispatch('keydown', { key })
-      if (!event.defaultPrevented && this.tagName === 'button' && (key === 'Enter' || key === ' ')) this.dispatch('click')
+    press(key, modifiers) {
+      const event = this.dispatch('keydown', { key, ...modifiers })
+      if (!event.defaultPrevented) {
+        if (key === 'Escape') this.closest('dialog[open]')?.close()
+        if (this.tagName === 'button' && (key === 'Enter' || key === ' ')) this.dispatch('click')
+      }
+      return event
     }
     showModal() { this.open = true }
     close() { this.open = false; this.dispatch('close') }
+    scrollIntoView(options) { this.lastScroll = options }
   }
 
   const document = new Element('#document')
@@ -150,9 +174,10 @@ function loadOverview(graph, { review = false, clientHeight = 320, reply = () =>
   document.createElement = tag => new Element(tag)
   document.createElementNS = (namespaceURI, tag) => Object.assign(new Element(tag), { namespaceURI })
   const ids = new Map()
+  const tags = new Map(Array.from(page.matchAll(/<([\w-]+)\b[^>]*\sid="([^"]+)"/g), ([, tag, id]) => [id, tag]))
   function by(id) {
     if (!ids.has(id)) {
-      const element = new Element('div')
+      const element = new Element(tags.get(id) ?? 'div')
       ids.set(id, element)
       document.body.append(element)
     }
@@ -163,11 +188,19 @@ function loadOverview(graph, { review = false, clientHeight = 320, reply = () =>
   by('overview-viewport').clientHeight = clientHeight
   by('overview-viewport').append(by('overview-tree'))
   by('overview-tree').append(by('overview-wires'))
+  by('reader-dialog').append(by('dialog-title'), by('dialog-content'), by('dialog-close'))
+  by('export-options').append(by('export-toggle'), by('export-png'), by('print-view'))
   by('data').textContent = page.match(/id="data">(.*?)<\/script>/s)[1]
 
-  const location = { hash: '#overview' }
+  const location = { hash: view }
   const windowEvents = new Map()
-  const window = { addEventListener(type, listener) { windowEvents.set(type, listener) }, getSelection: () => selection }
+  let printCount = 0
+  const window = { addEventListener(type, listener) { windowEvents.set(type, listener) }, getSelection: () => selection,
+    print() { printCount++; windowEvents.get('beforeprint')() } }
+  const downloads = []
+  document.addEventListener('click', ({ target }) => {
+    if (target.download) downloads.push({ name: target.download, href: target.href })
+  })
   const processRoutes = [], reviewRequests = []
   const captureReview = getCurrent => { reviewCurrent = getCurrent }
   const reviewSetup = review ? reviewScript + `
@@ -179,8 +212,11 @@ function loadOverview(graph, { review = false, clientHeight = 320, reply = () =>
   ` : ''
   const script = page.match(/<script(?: nonce="[^"]+")?>\s*(const data = .*?)<\/script>/s)[1]
   runInNewContext(reviewSetup + '\n' + script + `
-    navigation = () => {}
-    renderProcess = () => processRoutes.push([current.key, selectedByFlow.get(current.key)])
+    const renderCurrentProcess = renderProcess
+    renderProcess = () => {
+      processRoutes.push([current.key, selectedByFlow.get(current.key)])
+      renderCurrentProcess()
+    }
   `, {
     document, window, Element, Node: { ELEMENT_NODE: 1 }, location, processRoutes, captureReview,
     history: { pushState(_state, _title, hash) { location.hash = hash } },
@@ -192,7 +228,13 @@ function loadOverview(graph, { review = false, clientHeight = 320, reply = () =>
     confirm,
     innerWidth: 800, innerHeight: 600, clearTimeout, AbortController, URLSearchParams,
     ResizeObserver: class { observe() {} },
-    matchMedia: () => ({ matches: false, addEventListener() {} }),
+    matchMedia: query => ({ matches: mobile && query === '(max-width: 650px)', addEventListener() {} }),
+    getComputedStyle: element => ({ getPropertyValue: key => element.style[key] ?? '',
+      color: element.matches('.overview-wire')
+        ? (element.matches('.expanded, .focused') ? 'rgb(141, 209, 173)' : 'rgb(53, 62, 57)') : 'rgb(233, 238, 234)',
+      backgroundColor: 'rgb(29, 32, 34)',
+      borderTopColor: 'rgb(53, 62, 57)', fontFamily: '"Microsoft YaHei UI", sans-serif', fontSize: '13.5px', fontWeight: '640',
+      strokeWidth: '1.25px' }),
   })
   const visible = () => by('overview-tree').querySelectorAll('.overview-position')
   const cards = () => visible().map(position => position.firstElementChild)
@@ -204,6 +246,7 @@ function loadOverview(graph, { review = false, clientHeight = 320, reply = () =>
     input.dispatch('input')
   }
   return { by, document, visible, cards, kinds, wires, filter, focused: () => document.activeElement, location, processRoutes,
+    downloads, printCount: () => printCount,
     reviewCurrent, reviewRequests, reviewMenu: () => document.querySelector('.review-menu'),
     reviewDialog: () => document.querySelector('.review-dialog'),
     goToOverview() { location.hash = '#overview'; windowEvents.get('hashchange')() },
@@ -336,6 +379,141 @@ test('search expands the path to matches, highlights direct hits and restores ma
   assert.deepEqual(kinds(), ['project', 'area', 'group', 'area'])
   assert.equal(by('overview-viewport').hidden, false)
   assert.equal(by('overview-empty').hidden, true)
+})
+
+test('search shortcuts focus the current view, and editing keys stay in the input', () => {
+  const { by, cards, focused } = loadOverview(parseGraph(raw), { mobile: true })
+  const [project, group] = cards()
+  const viewport = by('overview-viewport')
+  viewport.scrollLeft = 42
+  viewport.scrollTop = 84
+  assert.equal(project.press('/').defaultPrevented, true)
+  assert.equal(focused(), by('overview-search'))
+  for (const key of ['/', '?', 'f']) assert.equal(focused().press(key).defaultPrevented, false)
+  assert.ok(!by('reader-dialog').open)
+  assert.deepEqual([viewport.scrollLeft, viewport.scrollTop], [42, 84])
+  project.press('f')
+  assert.deepEqual([viewport.scrollLeft, viewport.scrollTop], [0, 0])
+  project.press('k', { metaKey: true })
+  assert.equal(focused(), by('overview-search'))
+
+  group.click()
+  cards()[2].click()
+  assert.equal(by('navigator').open, false)
+  assert.equal(by('title').press('/').defaultPrevented, true)
+  assert.equal(by('navigator').open, true)
+  assert.equal(focused(), by('search'))
+  assert.equal(focused().press('k', { ctrlKey: true }).defaultPrevented, false)
+  by('title').press('k', { ctrlKey: true })
+  assert.equal(focused(), by('search'))
+})
+
+test('process fit scales and scrolls the diagram, and the button restores its original size', () => {
+  const { by } = loadOverview(parseGraph(raw), { view: '#export/obsidian' })
+  const graph = by('graph'), viewport = by('process-viewport')
+  graph.style.height = '1152px'
+  graph.getBoundingClientRect = () => ({ top: 0, left: 0, width: 460, height: 1152 })
+  by('title').press('f')
+  assert.equal(graph.style['--process-scale'], '0.5')
+  assert.equal(viewport.style.height, '576px')
+  assert.equal(viewport.lastScroll.block, 'start')
+  assert.equal(by('fit-process').textContent, '恢复原大小')
+  by('fit-process').click()
+  assert.equal(graph.style['--process-scale'], undefined)
+  assert.equal(viewport.style.height, '')
+  assert.equal(by('fit-process').textContent, '适应窗口')
+})
+
+test('shortcut help is modal, lists all views, and restores focus on Escape or backdrop click', () => {
+  const { by, cards, focused } = loadOverview(parseGraph(raw))
+  const project = cards()[0], dialog = by('reader-dialog'), close = by('dialog-close')
+  const page = renderReader(parseGraph(raw))
+  assert.match(page, /<dialog[^>]*role="dialog"[^>]*aria-modal="true"[^>]*aria-labelledby="dialog-title"/)
+  project.focus()
+  project.press('?', { shiftKey: true })
+  assert.equal(dialog.open, true)
+  assert.equal(by('dialog-title').textContent, '快捷键与说明')
+  assert.deepEqual(dialog.querySelectorAll('ul').at(-1).children.map(row => row.textContent.split(' · ')[0]),
+    ['功能总览', '操作流程', '功能关系'])
+  assert.equal(focused(), close)
+  close.press('Escape')
+  assert.equal(dialog.open, false)
+  assert.equal(focused(), project)
+
+  by('shortcut-help').click()
+  by('dialog-content').click()
+  assert.equal(dialog.open, true)
+  dialog.dispatch('click', { clientX: -1, clientY: 0 })
+  assert.equal(dialog.open, false)
+  assert.equal(focused(), by('shortcut-help'))
+})
+
+test('evidence badges open source cards with location, preview, symbol and anchor status', () => {
+  const { by, focused } = loadOverview(graphWithEvidence(), { view: '#export/obsidian' })
+  const dialog = by('reader-dialog')
+  const [source, stale, doc] = by('detail').querySelectorAll('.source-badge')
+  assert.deepEqual([source, stale, doc].map(badge => badge.textContent), ['SRC 1', 'SRC 2', 'SRC 3'])
+  assert.equal(source.parentElement.querySelector('code').textContent, 'lib/graph.mjs:10')
+  assert.match(stale.parentElement.querySelector('.muted').textContent, /证据待复核/)
+  source.click()
+  assert.equal(dialog.open, true)
+  assert.equal(by('dialog-title').textContent, '源码卡片')
+  const fields = () => dialog.querySelectorAll('dd').map(field => field.textContent)
+  assert.deepEqual(fields(), ['lib/graph.mjs', '第 10 行', '实现', '源码符号 parseGraph', '行指纹已记录'])
+  assert.equal(dialog.querySelector('pre').textContent, ' 9  // 校验\n10  export function parseGraph() {}')
+  focused().press('Escape')
+  assert.equal(dialog.open, false)
+  assert.equal(focused(), source)
+  stale.click()
+  assert.deepEqual(fields(), ['tests/graph.test.mjs', '文件级', '测试', '未记录行指纹'])
+  assert.deepEqual(dialog.querySelectorAll('p').map(node => node.textContent), ['证据待复核，请重新确认源码位置。', '暂无源码片段'])
+  by('dialog-close').click()
+  doc.click()
+  assert.deepEqual(fields(), ['README.md', '文件级', '文档', '未记录行指纹'])
+})
+
+test('reader payload records anchor presence without exposing fingerprints or changing the graph', () => {
+  const graph = graphWithEvidence()
+  const before = JSON.stringify(graph)
+  const { groups } = JSON.parse(renderReader(graph).match(/id="data">(.*?)<\/script>/s)[1])
+  const { sources } = groups[0].flows[0].nodes[0]
+  assert.deepEqual(sources.map(source => source.anchored), [true, false, false])
+  assert.ok(sources.every(source => !Object.hasOwn(source, 'anchor')))
+  assert.equal(JSON.stringify(graph), before)
+})
+
+test('export downloads the visible topology as SVG when PNG is unavailable and prints the active view', () => {
+  const graph = parseGraph(raw)
+  graph.project.name = '示例 <图> & 项目'
+  const { by, cards, filter, downloads, printCount } = loadOverview(graph)
+  const page = renderReader(graph)
+  assert.match(page, /id="export-png"[^>]*>导出 PNG/)
+  assert.match(page, /id="print-view"[^>]*>打印 \/ 另存为 PDF/)
+  const png = by('export-png')
+  const exported = () => decodeURIComponent(downloads.at(-1).href.split(',')[1])
+  png.click()
+  assert.equal(downloads[0].name, '示例 _图_ & 项目-topology.svg')
+  assert.match(downloads[0].href, /^data:image\/svg\+xml/)
+  assert.match(exported(), /示例 &lt;图&gt; &amp; 项目/)
+  assert.match(exported(), /导出项目图谱/)
+  assert.doesNotMatch(exported(), /在 Obsidian 打开图谱/)
+  assert.match(exported(), /stroke="rgb\(53, 62, 57\)"/)
+
+  cards()[1].click()
+  png.click()
+  assert.match(exported(), /在 Obsidian 打开图谱/)
+  assert.doesNotMatch(exported(), /读取并验证图谱/)
+  assert.match(exported(), /stroke="rgb\(141, 209, 173\)"/)
+  by('print-view').click()
+  assert.equal(printCount(), 1)
+  assert.equal(by('print-topology').innerHTML, exported())
+  filter('no matching results')
+  assert.equal(png.disabled, true)
+  filter('')
+  cards()[2].click()
+  assert.equal(png.disabled, true)
+  by('print-view').click()
+  assert.equal(printCount(), 2)
 })
 
 test('DSH review finds the module and resolves a selected step to its own flow', () => {

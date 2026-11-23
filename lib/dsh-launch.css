@@ -328,3 +328,7 @@ button:disabled { opacity: .55; cursor: wait; }
   .intro .opening { display: none; }
   .intro .launcher::before,.intro .brand,.intro .choice::after,.intro .choice *,.intro .entry-line::after,.entry-button { animation: none; transition: none; }
 }
+
+.workspace-generate { display: flex; align-items: flex-start; gap: 8px; margin-top: 18px; cursor: pointer; }
+.workspace-generate input { margin: 3px 0 0; accent-color: var(--accent); }
+.workspace-generate span { display: block; margin-top: 2px; color: var(--quiet); font-size: .86rem; font-weight: 400; }

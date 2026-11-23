@@ -21,6 +21,117 @@ ID 使用小写字母、数字和连字符。领域 ID 在项目内唯一，功�
 
 项目术语最多 200 条，按不区分大小写的术语名去重。查看器优先显示项目解释，并为常见术语提供内置解释。增量文档补丁里的 glossary 只需包含新增或修订的定义。
 
+## 校验错误码
+
+`dsh-threadlight validate <graph.json> --json` 在标准输出写入一个 JSON 对象。成功时退出码为 0，`summary` 给出功能区、线路、步骤和领域的数量。省略 `--json` 时，成功输出直接包含这四个计数字段。
+
+~~~json
+{"ok":true,"summary":{"groups":1,"flows":1,"nodes":3,"areas":0}}
+~~~
+
+失败时退出码为 1，`error` 描述首个校验错误或输入文件错误。
+
+~~~json
+{
+  "ok": false,
+  "error": {
+    "code": "graph/source-path",
+    "path": "groups[0].flows[0].nodes[0].sources[0].path",
+    "message": "Invalid graph: groups[0].flows[0].nodes[0].sources[].path must be repository-relative",
+    "hint": "Use a repository-relative path with forward slashes."
+  }
+}
+~~~
+
+`parseGraph(raw)` 校验失败时抛出 `GraphError`。`inspectGraph(raw)` 返回与 CLI 同形的校验回执，并继续抛出其他异常。`GraphError` 包含以下字段。
+
+- `code` 是下表中的稳定错误码，供程序判断失败原因。
+- `path` 指向输入中的字段、数组项或对象，数组下标从 0 开始。`$` 指整个输入。
+- `message` 是以 `Invalid graph:` 开头的可读说明。
+- `hint` 是可选的修复提示。
+
+| 错误码 | 含义 | 典型修复 |
+| --- | --- | --- |
+| `graph/arguments` | CLI 校验参数无效 | 传入恰好一个图谱文件路径和可选的 `--json` |
+| `graph/input-read` | CLI 无法读取输入文件 | 检查路径、文件类型与读取权限 |
+| `graph/input-size` | 输入超过 8 MiB，或 API 收到非字符串输入 | 提供不超过 8 MiB 的 UTF-8 JSON 文本 |
+| `graph/json` | JSON 语法错误或文件编码无效 | 修正 JSON 语法并以 UTF-8 保存 |
+| `graph/schema-version` | 根值不是图谱对象或 `schemaVersion` 不是 `1` | 使用根对象及数值 `1` |
+| `graph/project-name` | 项目名称无效 | 填写最多 160 字符的非空单行名称 |
+| `graph/area-list` | 领域数组无效 | 提供 0 至 32 个领域 |
+| `graph/area-record` | 领域条目不是对象 | 提供含 `id` 和 `title` 的对象 |
+| `graph/area-id-format` | 领域 ID 格式无效 | 使用最多 64 字符的小写 slug |
+| `graph/area-id` | 领域 ID 重复 | 为每个领域分配项目内唯一的 ID |
+| `graph/area-title` | 领域标题无效 | 填写最多 160 字符的非空单行标题 |
+| `graph/area-summary` | 领域摘要无效 | 提供最多 6000 字符的文本，或省略此字段 |
+| `graph/glossary-list` | 术语数组无效 | 提供最多 200 个术语对象 |
+| `graph/glossary-entry` | 术语条目不是对象 | 提供含 `term` 和 `definition` 的对象 |
+| `graph/glossary-term` | 术语文本无效 | 填写最多 64 字符的非空单行术语 |
+| `graph/glossary-definition` | 术语解释无效 | 填写最多 360 字符的非空单行解释 |
+| `graph/glossary-term-whitespace` | 术语含首尾空白 | 去掉首尾空白 |
+| `graph/glossary-term-duplicate` | 术语大小写折叠后重复 | 合并重复的术语定义 |
+| `graph/group-list` | 功能区数组无效 | 提供 1 至 64 个功能区 |
+| `graph/group-record` | 功能区条目不是对象 | 提供功能区对象 |
+| `graph/group-id-format` | 功能区 ID 格式无效 | 使用最多 64 字符的小写 slug，避开 Windows 保留设备名 |
+| `graph/group-id` | 功能区 ID 重复 | 为每个功能区分配项目内唯一的 ID |
+| `graph/group-title` | 功能区标题无效 | 填写最多 160 字符的非空单行标题 |
+| `graph/area-reference-type` | 声明领域后，功能区的 `area` 缺失或不是字符串 | 填写已声明的领域 ID |
+| `graph/area-reference` | 功能区引用了未知领域 | 使用 `project.areas` 中已声明的 ID |
+| `graph/area-reference-undeclared` | 未声明领域时填写了功能区的 `area` | 省略 `area`，或声明领域并为所有功能区填写归属 |
+| `graph/group-summary` | 功能区摘要无效 | 提供最多 6000 字符的非空文本，或省略此字段 |
+| `graph/flow-list` | 线路数组无效 | 在功能区内提供 1 至 100 条线路 |
+| `graph/flow-record` | 线路条目不是对象 | 提供线路对象 |
+| `graph/flow-id-format` | 线路 ID 格式无效 | 使用最多 64 字符的小写 slug，避开 Windows 保留设备名 |
+| `graph/flow-id` | 线路 ID 重复 | 为功能区内的每条线路分配唯一 ID |
+| `graph/flow-title` | 线路标题无效 | 填写最多 160 字符的非空单行标题 |
+| `graph/flow-summary` | 线路摘要无效 | 填写最多 6000 字符的非空文本 |
+| `graph/node-list` | 节点数组无效 | 在线路内提供 1 至 200 个节点 |
+| `graph/node-record` | 节点条目不是对象 | 提供节点对象 |
+| `graph/node-id-format` | 节点 ID 格式无效 | 使用最多 64 字符的小写 slug，避开 Windows 保留设备名 |
+| `graph/node-id` | 节点 ID 重复 | 为线路内的每个节点分配唯一 ID |
+| `graph/node-title` | 节点标题无效 | 填写最多 160 字符的非空单行标题 |
+| `graph/node-summary` | 节点摘要无效 | 填写最多 6000 字符的非空文本 |
+| `graph/node-details` | 节点详情数组无效 | 提供最多 50 条详情，可用空数组 |
+| `graph/node-detail` | 单条节点详情无效 | 使用最多 6000 字符的非空文本 |
+| `graph/source-list` | 节点证据数组无效 | 提供最多 50 条证据，可用空数组 |
+| `graph/source-record` | 证据条目不是对象 | 提供含 `path` 和 `kind` 的对象 |
+| `graph/source-path` | 证据路径无效 | 使用最多 1024 字符的仓库相对路径和正斜杠 |
+| `graph/source-kind` | 证据种类不受支持 | 使用 `source`、`test`、`documentation` 或 `workflow` |
+| `graph/source-line` | 证据行号无效 | 使用正的安全整数，或省略行号 |
+| `graph/source-status` | 证据待复核状态无效 | 使用 `needs-review`，并省略行号和指纹 |
+| `graph/source-anchor` | 证据指纹无效 | 为带行号的引用提供完整的行和上下文指纹 |
+| `graph/source-preview` | 预览对象、引用状态或起始行不符合要求 | 提供有效的 `startLine`，并使用适用的未标记待复核引用 |
+| `graph/source-preview-text` | 预览文本无效 | 填写最多 1200 字符的非空文本 |
+| `graph/source-preview-coverage` | 预览未覆盖引用行 | 调整起始行或文本，让预览包含引用行 |
+| `graph/source-symbol` | 符号对象、种类或行号范围无效 | 使用支持的符号种类，并让范围覆盖证据行号 |
+| `graph/source-symbol-name` | 符号名称无效 | 填写最多 160 字符的非空单行名称 |
+| `graph/node-state` | 节点状态不受支持 | 使用 `planned`、`implemented` 或 `verified` |
+| `graph/node-divergence` | 差异说明无效 | 提供最多 2000 字符的文本，或省略此字段 |
+| `graph/verification-state` | 非 `verified` 节点带有验证记录 | 移除记录，或在验证通过后将状态设为 `verified` |
+| `graph/verification-list` | 验证数组无效 | 提供最多 20 条验证记录的数组 |
+| `graph/verification-record` | 验证条目不是对象 | 提供包含 `id`、`at`、`result` 和 `summary` 的对象 |
+| `graph/verification-id-format` | 验证记录 ID 格式无效 | 使用最多 64 字符的小写 slug |
+| `graph/verification-id` | 验证记录 ID 重复 | 为节点内的每条记录分配唯一 ID |
+| `graph/verification-at` | 验证时间无效 | 使用可解析的 ISO-8601 时间 |
+| `graph/verification-result` | 验证结果不受支持 | 按实际结果填写 `passed` 或 `failed` |
+| `graph/verification-summary` | 验证摘要无效 | 填写最多 360 字符的非空单行摘要 |
+| `graph/verification-command` | 验证命令无效 | 提供最多 512 字符的非空单行命令，或省略此字段 |
+| `graph/verification` | `verified` 节点缺少通过的验证 | 记录实际通过的验证，或更正节点状态 |
+| `graph/edge-list` | 连线数组无效 | 提供最多 2000 条连线，可用空数组 |
+| `graph/edge-endpoints` | 连线对象或端点无效 | 将 `from` 和 `to` 指向同一线路中的不同节点 |
+| `graph/edge-kind` | 连线种类不受支持 | 使用 `sequence`、`branch` 或 `merge` |
+| `graph/edge-label` | 连线标签无效 | 使用最多 120 字符的非空单行标签，或省略此字段 |
+| `graph/edge-duplicate` | 连线的起点、终点和种类重复 | 移除重复的连线 |
+| `graph/layout-rows` | 布局的外层数组无效 | 提供 1 至 200 列 |
+| `graph/layout-row` | 单列布局的数组无效 | 每列放置 1 至 20 个节点 |
+| `graph/layout-node` | 布局节点不存在或已放置 | 引用当前线路的节点，每个 ID 只放置一次 |
+| `graph/layout-incomplete` | 布局遗漏节点 | 将所有未放置的节点补入布局 |
+| `graph/link-list` | 跨线路链接数组无效 | 提供最多 50 条链接，或省略此字段 |
+| `graph/link-reference` | 链接对象或 `group`、`flow` 字段类型无效 | 提供链接对象，使用字符串填写目标功能区和线路 ID |
+| `graph/link-target` | 链接指向不存在的线路或自身 | 指向另一条已声明的线路 |
+| `graph/link-kind` | 跨线路链接种类不受支持 | 使用 `uses` 或 `continues` |
+| `graph/link-duplicate` | 链接目标与种类重复 | 移除重复的跨线路链接 |
+
 ## 项目层级
 
 有领域的图谱按「项目 → 领域 → 功能区 → 线路 → 步骤」展示。project.areas 是最多 32 项的数组。每个领域的 id 是最长 64 字符的小写 slug，title 是最长 160 字符的非空单行文本，summary 是最长 6000 字符的可选文本。功能区仍保存在顶层 groups。声明领域后，每个功能区的 area 必须是某个已声明领域的 ID。领域按 project.areas 的顺序展示，同一领域内的功能区按 groups 的顺序展示。省略 project.areas 或使用空数组时，图谱按「项目 → 功能区 → 线路 → 步骤」展示，所有功能区必须省略 area。跨线路链接、步骤锚点和批注继续使用原有标识。

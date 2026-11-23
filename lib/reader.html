@@ -34,6 +34,11 @@
     .brand { font-size: .8rem; font-weight: 640; color: var(--accent); }
     h1 { font-size: clamp(1.55rem,4vw,2rem); line-height: 1.2; letter-spacing: -.035em; }
     .header-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 16px; font-size: .88rem; }
+    .export-options { position: relative; }
+    .export-options summary { cursor: pointer; color: var(--accent); }
+    .export-panel { position: absolute; z-index: 2; inset-inline-end: 0; min-width: max-content; margin-top: 5px; padding: 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); box-shadow: 0 5px 22px #0002; }
+    .export-panel button { display: block; width: 100%; text-align: left; }
+    .export-panel button + button { margin-top: 5px; }
     .muted { color: var(--quiet); }
     .views { display: flex; gap: 18px; padding: 0 clamp(14px,3.3vw,52px); border-bottom: 1px solid var(--line); }
     .view-button { border: 0; border-bottom: 3px solid transparent; padding: 10px 2px 9px; background: none; color: var(--quiet); font-weight: 630; }
@@ -52,9 +57,10 @@
     .overview-search input { width: min(24rem,100%); }
     .overview-viewport { overflow: auto; max-height: max(220px, calc(100dvh - 220px)); border: 1px solid var(--line); border-radius: 13px; background: var(--panel); }
     .overview-map { position: relative; }
+    .print-topology { display: none; }
     .overview-map svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-    .overview-wire { fill: none; stroke: var(--line); stroke-width: 1.25px; transition: d 150ms ease, stroke 150ms ease, opacity 150ms ease; }
-    .overview-wire.expanded, .overview-wire.focused { stroke: var(--accent); }
+    .overview-wire { --overview-stroke: var(--line); color: var(--overview-stroke); fill: none; stroke: var(--overview-stroke); stroke-width: 1.25px; transition: d 150ms ease, stroke 150ms ease, opacity 150ms ease; }
+    .overview-wire.expanded, .overview-wire.focused { --overview-stroke: var(--accent); }
     .overview-wire.focused { stroke-width: 2px; }
     .overview-position { position: absolute; transition: left 150ms ease, top 150ms ease, opacity 150ms ease; }
     .overview-card { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; height: 100%; padding: 6px 11px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); text-align: left; line-height: 1.25; }
@@ -103,7 +109,8 @@
     .guide-status { margin-left: auto; font-size: .84rem; }
     .guide-choices { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
     .guide-choices .guide-control { color: var(--accent); text-align: left; overflow-wrap: anywhere; }
-    .graph { position: relative; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; padding: 16px 24px; }
+    .process-viewport { overflow: clip; }
+    .graph { position: relative; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); overflow: hidden; padding: 16px 24px; transform: scale(var(--process-scale, 1)); transform-origin: top left; }
     .graph svg { position: absolute; inset: 0; height: 100%; width: 100%; pointer-events: none; color: var(--wire); }
     .graph path.wire { stroke: currentColor; fill: none; stroke-width: 1.35px; }
     .graph path.return-edge { stroke-dasharray: 5 4; }
@@ -137,8 +144,21 @@
     .detail code { font-size: .79rem; color: var(--quiet); user-select: all; }
     .detail time { display: block; color: var(--quiet); font-size: .79rem; }
     .detail .divergence { white-space: pre-wrap; }
-    .refs summary { cursor: pointer; }
-    .evidence-preview { max-height: 13rem; overflow: auto; padding: 8px; margin: 5px 0; border: 1px solid var(--line); white-space: pre-wrap; font-size: .76rem; }
+    .evidence-row { display: flex; align-items: baseline; gap: 8px; }
+    .source-badge { flex: none; border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; background: var(--highlight); color: var(--accent); font-size: .73rem; font-weight: 630; }
+    .source-badge:hover { border-color: var(--accent); }
+    .reader-dialog { width: min(42rem, calc(100% - 28px)); max-height: calc(100dvh - 28px); padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); }
+    .reader-dialog::backdrop { background: #0008; }
+    .dialog-surface { padding: 16px clamp(13px,3vw,24px) 20px; overflow-wrap: anywhere; }
+    .dialog-heading { display: flex; justify-content: space-between; align-items: start; gap: 10px; margin-bottom: 12px; }
+    .dialog-heading h2 { font-size: 1.2rem; }
+    .dialog-content h3 { font-size: 1rem; margin-top: 14px; }
+    .dialog-content ul { padding-inline-start: 1.4em; margin: 5px 0 0; }
+    .dialog-content kbd { color: var(--accent); }
+    .source-fields { display: grid; grid-template-columns: max-content minmax(0,1fr); gap: 4px 12px; margin: 0 0 10px; }
+    .source-fields dt { color: var(--quiet); }
+    .source-fields dd { margin: 0; }
+    .evidence-preview { max-height: 40dvh; overflow: auto; padding: 8px; margin: 5px 0; border: 1px solid var(--line); white-space: pre-wrap; font-size: .82rem; tab-size: 4; }
     .relation { padding: 4px 0; color: var(--accent); font-size: .89rem; }
     .relations { grid-column: 2 / -1; }
     .relations-heading { margin-bottom: 15px; }
@@ -183,6 +203,18 @@
       .graph { padding-inline: 18px; }
       .guide-status { width: 100%; margin-left: 0; }
     }
+    @media print {
+      body > header, nav, .overview-search, .overview-viewport, .guide-bar, .guide-choices,
+      .reader-dialog, .term-tooltip, .review-dialog, .review-menu, .source-badge { display: none !important; }
+      .workspace { display: block; max-width: none; padding: 0; }
+      .detail { margin-top: 18px; }
+      .process-viewport { height: auto !important; overflow: visible; }
+      .graph { --process-scale: 1 !important; }
+      .print-topology { display: block; break-inside: avoid; }
+      .print-topology svg { display: block; width: 100%; height: auto; max-height: 225mm; }
+      .graph, .print-topology, .relations-map { print-color-adjust: exact; }
+      .step, .refs li { break-inside: avoid; }
+    }
   </style>
 </head>
 <body>
@@ -190,6 +222,14 @@
     <div><p class="brand">Threadlight</p><h1 id="project"></h1></div>
     <div class="header-actions">
       <label class="beginner"><input type="checkbox" id="beginner">新手模式</label>
+      <button class="guide-control" id="shortcut-help" type="button" aria-haspopup="dialog" aria-controls="reader-dialog">快捷键</button>
+      <details class="export-options" id="export-options">
+        <summary id="export-toggle">导出</summary>
+        <div class="export-panel">
+          <button class="guide-control" id="export-png" type="button">导出 PNG</button>
+          <button class="guide-control" id="print-view" type="button">打印 / 另存为 PDF</button>
+        </div>
+      </details>
       <span id="revision" class="muted"></span><!-- threadlight-heading -->
     </div>
   </header>
@@ -207,6 +247,7 @@
           <svg id="overview-wires" aria-hidden="true"></svg>
         </div>
       </div>
+      <div class="print-topology" id="print-topology"></div>
       <p class="muted" id="overview-empty" role="status" hidden>找不到匹配的分支或步骤</p>
     </section>
     <nav class="nav" id="navigation" aria-label="功能线路" hidden>
@@ -215,14 +256,17 @@
     <section class="diagram" id="process-panel" aria-labelledby="title" hidden>
       <span class="scope" id="process-group"></span><h2 id="title" data-review-text=""></h2><p id="summary" class="muted" data-review-text=""></p>
       <div class="guide-bar">
+        <button class="guide-control" id="fit-process" type="button" aria-controls="graph">适应窗口</button>
         <button class="guide-control" id="guide-toggle" type="button" aria-pressed="false">从这一步开始导览</button>
         <button class="guide-control" id="guide-back" type="button" hidden>回到上一步</button>
         <p class="guide-status muted" id="guide-status" aria-live="polite" tabindex="-1"></p>
       </div>
       <div class="guide-choices" id="guide-choices" hidden></div>
-      <div class="graph" id="graph">
-        <svg aria-hidden="true"><defs><marker id="arrow" markerWidth="7" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L7 4 L0 8z" fill="var(--wire)"/></marker></defs><g id="wires"></g></svg>
-        <div id="lanes"></div>
+      <div class="process-viewport" id="process-viewport">
+        <div class="graph" id="graph">
+          <svg aria-hidden="true"><defs><marker id="arrow" markerWidth="7" markerHeight="8" refX="6" refY="4" orient="auto"><path d="M0 0 L7 4 L0 8z" fill="var(--wire)"/></marker></defs><g id="wires"></g></svg>
+          <div id="lanes"></div>
+        </div>
       </div>
     </section>
     <aside class="detail" id="detail" aria-label="步骤详情" aria-live="polite" hidden></aside>
@@ -231,13 +275,23 @@
       <div id="relations-content"></div>
     </section>
   </main>
+  <dialog class="reader-dialog" id="reader-dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+    <div class="dialog-surface">
+      <div class="dialog-heading">
+        <h2 id="dialog-title"></h2>
+        <button class="guide-control" id="dialog-close" type="button" autofocus>关闭</button>
+      </div>
+      <div class="dialog-content" id="dialog-content"></div>
+    </div>
+  </dialog>
   <div id="term-tooltip" class="term-tooltip" role="tooltip" hidden><strong></strong><p></p></div>
   <script type="application/json" id="data">"THREADLIGHT_GRAPH_DATA"</script>
   <!-- threadlight-review -->
   <script>
     const data = JSON.parse(document.getElementById('data').textContent)
     const by = id => document.getElementById(id)
-    const graph = by('graph'), lanes = by('lanes'), wires = by('wires'), detail = by('detail')
+    const graph = by('graph'), processViewport = by('process-viewport')
+    const lanes = by('lanes'), wires = by('wires'), detail = by('detail')
     const groups = data.groups.map(group => ({
       group, items: group.flows.map(flow => ({ group, flow, key: group.id + '/' + flow.id })),
     }))
@@ -269,6 +323,8 @@
     const viewButtons = document.querySelectorAll('.view-button')
     const narrow = matchMedia('(max-width: 650px)')
     const beginner = by('beginner'), tooltip = by('term-tooltip')
+    const readerDialog = by('reader-dialog'), dialogClose = by('dialog-close'), shortcutHelp = by('shortcut-help')
+    const exportOptions = by('export-options'), exportPng = by('export-png'), fitProcess = by('fit-process')
     const glossary = new Map(data.glossary.map(entry => [entry.term.toLowerCase(), entry.definition]))
     const patterns = [...glossary.keys()].sort((a, b) => b.length - a.length).map(term => {
       const escape = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -278,7 +334,7 @@
     })
     const termPattern = new RegExp(patterns.join('|'), 'gi')
     let current = items[0], selected, mode, guide
-    let activeTerm, pinned, closeTimer
+    let activeTerm, pinned, closeTimer, dialogTrigger, processFitted
     by('project').textContent = data.project.name
     document.title = data.project.name + ' · Threadlight'
     const revision = data.snapshot?.id || data.snapshot?.baseCommit
@@ -296,6 +352,64 @@
       result.type = 'button'
       result.addEventListener('click', fn)
       return result
+    }
+
+    function openReaderDialog(title, trigger, ...content) {
+      if (readerDialog.open) return
+      hideTooltip()
+      dialogTrigger = trigger === document.body ? shortcutHelp : trigger
+      by('dialog-title').textContent = title
+      by('dialog-content').replaceChildren(...content)
+      readerDialog.showModal()
+      dialogClose.focus()
+    }
+
+    function showShortcuts(trigger) {
+      const shortcuts = make('ul')
+      for (const [keys, description] of [
+        [['/', 'Ctrl+K', '⌘+K'], '聚焦功能总览或操作流程的搜索框'],
+        [['?'], '打开快捷键与说明'],
+        [['f'], '将拓扑滚动到左上角，或将流程图适应窗口'],
+        [['Esc'], '关闭浮层'],
+        [['↑', '↓', '←', '→', 'Home', 'End'], '浏览总览节点，展开或收起分支'],
+      ]) {
+        const row = make('li')
+        keys.forEach((key, index) => {
+          if (index) row.append(' / ')
+          row.append(make('kbd', key))
+        })
+        row.append(' · ' + description)
+        shortcuts.append(row)
+      }
+      const views = make('ul')
+      views.append(make('li', '功能总览 · 逐级展开项目功能，找到线路和步骤。'),
+        make('li', '操作流程 · 查看所选线路的步骤、分支和源码证据。'),
+        make('li', '功能关系 · 查看当前线路与其他线路的接续和使用关系。'))
+      openReaderDialog('快捷键与说明', trigger, shortcuts, make('h3', '三个视图'), views)
+    }
+
+    function handleShortcuts(event) {
+      const { target, key, ctrlKey, metaKey, altKey, shiftKey } = event
+      if (event.defaultPrevented || event.isComposing || readerDialog.open || target.closest?.('dialog[open]') ||
+        target.isContentEditable || target.closest?.('input, textarea, select') || altKey) return
+      if ((ctrlKey || metaKey) && (key.toLowerCase() !== 'k' || shiftKey)) return
+      if (key === '/' || ctrlKey || metaKey) {
+        if (mode !== 'overview' && mode !== 'process') return
+        event.preventDefault()
+        if (mode === 'overview') overviewSearch.focus()
+        else {
+          by('navigator').open = true
+          by('search').focus()
+        }
+      } else if (key === '?') {
+        event.preventDefault()
+        showShortcuts(document.activeElement)
+      } else if (key === 'f') {
+        if (mode === 'overview') overviewViewport.scrollLeft = overviewViewport.scrollTop = 0
+        else if (mode === 'process') fitProcessToWindow()
+        else return
+        event.preventDefault()
+      }
     }
 
     function stateOfStep(node) {
@@ -572,6 +686,7 @@
         groups.length + ' 个功能区 · ' + items.length + ' 条线路'
       by('overview-empty').hidden = Boolean(root)
       overviewViewport.hidden = !root
+      exportPng.disabled = !root
       const layout = root && layoutOverview(root)
       for (const [key, record] of overviewCards) {
         if (layout?.nodes.has(key)) continue
@@ -623,6 +738,91 @@
         cards[next]?.focus()
       } else return
       event.preventDefault()
+    }
+
+    function svgEscape(value) {
+      return String(value).toWellFormed().replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]/g, '')
+        .replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[char])
+    }
+
+    function svgText(element, x, y, value = element.textContent, align = 'start') {
+      const { color, fontFamily, fontSize, fontWeight } = getComputedStyle(element)
+      return `<text x="${x}" y="${y}" dominant-baseline="central" text-anchor="${align}" fill="${color}"
+        font-family="${svgEscape(fontFamily)}" font-size="${fontSize}" font-weight="${fontWeight}">${svgEscape(value)}</text>`
+    }
+
+    function serializeTopology() {
+      if (!overviewCards.size) return
+      const width = parseFloat(overviewMap.style.width), height = parseFloat(overviewMap.style.height)
+      const panel = getComputedStyle(overviewViewport).backgroundColor
+      const cardWidth = overviewSize.width
+      const lines = [], nodes = []
+      for (const { node, card, wire, control, count } of overviewCards.values()) {
+        if (wire) {
+          // Read the resolved theme color independently of any running stroke transition.
+          const { color, strokeWidth } = getComputedStyle(wire)
+          lines.push(`<path d="${wire.getAttribute('d')}" fill="none" stroke="${color}" stroke-width="${strokeWidth}"/>`)
+        }
+        const { entry, x, center, height: cardHeight, open } = node
+        const y = center - cardHeight / 2
+        const { backgroundColor, borderTopColor } = getComputedStyle(card)
+        const dot = card.querySelector('.overview-state'), kind = card.querySelector('.overview-kind')
+        const left = dot ? 28 : 12
+        const labelWidth = cardWidth - left - (count && !count.hidden ? (control === card ? 48 : 62) : 12)
+        const middle = cardHeight / 2
+        const label = card.querySelector('strong')
+        const text = (kind ? svgText(kind, 0, middle - 9) : '') + svgText(label, 0, middle + (kind ? 8 : 0))
+        const stateDot = dot ? `<circle cx="16" cy="${middle}" r="4" fill="${getComputedStyle(dot).backgroundColor}"/>` : ''
+        const toggle = count && !count.hidden ? svgText(control === card ? count : control,
+          cardWidth - (control === card ? 27 : 30), middle, count.textContent + (open ? ' ▾' : ' ▸'), 'middle') : ''
+        nodes.push(`<g transform="translate(${x} ${y})"><title>${svgEscape(entry.title)}</title>
+          <rect x=".5" y=".5" width="${cardWidth - 1}" height="${cardHeight - 1}" rx="9" fill="${backgroundColor}" stroke="${borderTopColor}"/>
+          ${stateDot}<svg x="${left}" width="${labelWidth}" height="${cardHeight}" overflow="hidden">${text}</svg>${toggle}</g>`)
+      }
+      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+        <rect width="100%" height="100%" fill="${panel}"/>${lines.join('')}${nodes.join('')}</svg>`
+      return { svg, width, height }
+    }
+
+    function svgDataUrl(svg) {
+      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
+    }
+
+    function downloadTopology(file, extension) {
+      const url = typeof file === 'string' ? file : URL.createObjectURL(file)
+      const link = make('a')
+      link.href = url
+      link.download = data.project.name.replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').trim() + '-topology.' + extension
+      document.body.append(link)
+      link.click()
+      link.remove()
+      if (typeof file !== 'string') setTimeout(() => URL.revokeObjectURL(url), 1000)
+    }
+
+    async function exportTopology() {
+      const topology = mode === 'overview' && serializeTopology()
+      if (!topology) return
+      const { svg, width, height } = topology
+      const canvas = make('canvas')
+      const canDownloadBlob = typeof Blob === 'function' && typeof URL.createObjectURL === 'function'
+      let png
+      if (canDownloadBlob && typeof Image === 'function' && typeof canvas.toBlob === 'function') {
+        try {
+          const scale = Math.min(window.devicePixelRatio || 1, 2, 4096 / Math.max(width, height))
+          canvas.width = Math.ceil(width * scale)
+          canvas.height = Math.ceil(height * scale)
+          const pen = canvas.getContext('2d')
+          if (pen) {
+            const image = new Image()
+            image.src = svgDataUrl(svg)
+            await image.decode()
+            pen.drawImage(image, 0, 0, canvas.width, canvas.height)
+            png = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+          }
+        } catch { /* Export SVG if the browser cannot rasterize this topology. */ }
+      }
+      if (png) downloadTopology(png, 'png')
+      else downloadTopology(canDownloadBlob ? new Blob([svg], { type: 'image/svg+xml' }) : svgDataUrl(svg), 'svg')
     }
 
     function canvasLayer(canvas) {
@@ -793,24 +993,49 @@
       }
     }
 
-    function renderEvidence(node, title, references) {
+    function sourceSymbol(symbol) {
+      const label = { call: '调用处', import: '导入处' }[symbol.kind] ?? '源码符号'
+      return label + ' ' + symbol.name
+    }
+
+    function showSource(source, trigger) {
+      const fields = make('dl', '', 'source-fields')
+      const entries = [['路径', source.path], ['位置', source.line ? '第 ' + source.line + ' 行' : '文件级'],
+        ['类型', kinds[source.kind]], ['锚点', source.anchored ? '行指纹已记录' : '未记录行指纹']]
+      if (source.symbol) entries.splice(3, 0, ['符号', sourceSymbol(source.symbol)])
+      for (const [label, value] of entries) fields.append(make('dt', label), make('dd', value))
+      const content = [fields]
+      if (source.status === 'needs-review') content.push(make('p', '证据待复核，请重新确认源码位置。', 'muted'))
+      if (source.preview) {
+        const { startLine, text } = source.preview
+        const lines = text.split('\n')
+        const digits = String(startLine + lines.length - 1).length
+        const excerpt = lines.map((line, index) => String(startLine + index).padStart(digits) + '  ' + line)
+        const preview = make('pre', excerpt.join('\n'), 'evidence-preview')
+        preview.tabIndex = 0
+        content.push(make('h3', '源码片段'), preview)
+      } else content.push(make('p', '暂无源码片段', 'muted'))
+      openReaderDialog('源码卡片', trigger, ...content)
+    }
+
+    function renderEvidence(node, title, references, offset = 0) {
       if (!references.length) return
       const list = make('ul', '', 'refs')
-      for (const source of references) {
+      for (const [index, source] of references.entries()) {
         const row = make('li')
-        const label = make(source.preview ? 'summary' : 'span', kinds[source.kind] + ' · ')
-        label.append(make('code', source.path + (source.line ? ':' + source.line : '')))
-        if (source.symbol) {
-          const kind = { call: '调用处', import: '导入处' }[source.symbol.kind] ?? '源码符号'
-          label.append(make('span', ' · ' + kind + ' ' + source.symbol.name))
-        }
+        const location = make('div', '', 'evidence-row')
+        const number = 'SRC ' + (offset + index + 1)
+        const path = source.path + (source.line ? ':' + source.line : '')
+        const badge = button(number, 'source-badge', event => showSource(source, event.currentTarget))
+        badge.setAttribute('aria-label', number + ' · 查看源码卡片 · ' + path)
+        badge.setAttribute('aria-haspopup', 'dialog')
+        badge.setAttribute('aria-controls', 'reader-dialog')
+        const label = make('span')
+        label.append(make('code', path), ' · ' + kinds[source.kind])
+        if (source.symbol) label.append(' · ' + sourceSymbol(source.symbol))
         if (source.status === 'needs-review') label.append(make('span', ' · 证据待复核', 'muted'))
-        if (source.preview) {
-          const disclosure = make('details')
-          const text = source.preview.text.split('\n').map((line, index) => (source.preview.startLine + index) + '  ' + line)
-          disclosure.append(label, make('pre', text.join('\n'), 'evidence-preview'))
-          row.append(disclosure)
-        } else row.append(label)
+        location.append(badge, label)
+        row.append(location)
         if (source.kind === 'documentation' && !source.status) {
           const others = (stepsByDocument.get(source.path) ?? []).filter(step => step.key !== current.key + '/' + node.id)
           const related = others.slice(0, 5).map(step => {
@@ -840,8 +1065,9 @@
         list.append(...node.details.map(value => reviewText('li', value, id)))
         detail.append(make('h3', '实现说明'), list)
       }
-      renderEvidence(node, '源码与测试', node.sources.filter(source => source.kind !== 'documentation'))
-      renderEvidence(node, '相关文档', node.sources.filter(source => source.kind === 'documentation'))
+      const codeSources = node.sources.filter(source => source.kind !== 'documentation')
+      renderEvidence(node, '源码与测试', codeSources)
+      renderEvidence(node, '相关文档', node.sources.filter(source => source.kind === 'documentation'), codeSources.length)
       if (data.documentRoot || data.review) {
         const link = make('a', '在项目文档中查看这一步 →', 'relation')
         const documentHref = data.review
@@ -884,18 +1110,19 @@
     function draw() {
       if (mode !== 'process') return
       const rect = graph.getBoundingClientRect()
+      const scale = Number(getComputedStyle(graph).getPropertyValue('--process-scale')) || 1
       const walked = new Set(guide?.edges)
       wires.replaceChildren()
       current.flow.edges.forEach((edge, i) => {
         const a = cards.get(edge.from).getBoundingClientRect(), b = cards.get(edge.to).getBoundingClientRect()
-        const x1 = (a.left + a.right) / 2 - rect.left, x2 = (b.left + b.right) / 2 - rect.left
-        const y1 = a.bottom - rect.top, y2 = b.top - rect.top - 4
+        const x1 = ((a.left + a.right) / 2 - rect.left) / scale, x2 = ((b.left + b.right) / 2 - rect.left) / scale
+        const y1 = (a.bottom - rect.top) / scale, y2 = (b.top - rect.top) / scale - 4
         const reverse = y2 <= y1
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
         if (reverse) {
           const side = 8 + (i % 3) * 4
-          const ax = a.left - rect.left, bx = b.left - rect.left - 4
-          const ay = (a.top + a.bottom) / 2 - rect.top, by = (b.top + b.bottom) / 2 - rect.top
+          const ax = (a.left - rect.left) / scale, bx = (b.left - rect.left) / scale - 4
+          const ay = ((a.top + a.bottom) / 2 - rect.top) / scale, by = ((b.top + b.bottom) / 2 - rect.top) / scale
           path.setAttribute('d', ['M', ax, ay, 'H', side, 'V', by, 'H', bx].join(' '))
         } else {
           const middle = (y1 + y2) / 2
@@ -910,6 +1137,27 @@
         path.setAttribute('marker-end', 'url(#arrow)')
         wires.append(path)
       })
+    }
+
+    function resetProcessSize() {
+      processFitted = false
+      fitProcess.textContent = '适应窗口'
+      graph.style.removeProperty('--process-scale')
+      processViewport.style.height = ''
+    }
+
+    function fitProcessToWindow(scroll = true) {
+      resetProcessSize()
+      const { height } = graph.getBoundingClientRect()
+      const scale = Math.min(1, Math.max(1, innerHeight - 24) / height)
+      if (scale < 1) {
+        processFitted = true
+        fitProcess.textContent = '恢复原大小'
+        graph.style.setProperty('--process-scale', String(scale))
+        processViewport.style.height = Math.ceil(height * scale) + 'px'
+      }
+      draw()
+      if (scroll) processViewport.scrollIntoView({ block: 'start', inline: 'nearest' })
     }
 
     function renderProcess() {
@@ -945,6 +1193,7 @@
     }
 
     function activate(view, item, focusHeading = false, writeHistory = true, step) {
+      if (processFitted) resetProcessSize()
       mode = view
       current = item
       if (step) selectedByFlow.set(item.key, step)
@@ -953,6 +1202,7 @@
       by('workspace').dataset.view = document.body.dataset.view = mode
       by('overview-panel').hidden = mode !== 'overview'
       if (mode === 'overview' && !overviewRoot) renderOverview(true)
+      exportPng.disabled = mode !== 'overview' || !overviewCards.size
       by('process-panel').hidden = detail.hidden = mode !== 'process'
       by('relations-panel').hidden = mode !== 'relations'
       by('navigation').hidden = mode === 'overview'
@@ -998,6 +1248,50 @@
     narrow.addEventListener('change', event => { by('navigator').open = !event.matches })
     window.addEventListener('hashchange', restoreView)
     by('search').addEventListener('input', navigation)
+    shortcutHelp.addEventListener('click', () => showShortcuts(shortcutHelp))
+    dialogClose.addEventListener('click', () => readerDialog.close())
+    readerDialog.addEventListener('click', event => {
+      if (event.target !== readerDialog) return
+      const { left, right, top, bottom } = readerDialog.getBoundingClientRect()
+      if (event.clientX < left || event.clientX > right || event.clientY < top || event.clientY > bottom) readerDialog.close()
+    })
+    readerDialog.addEventListener('close', () => {
+      if (!readerDialog.open) {
+        const trigger = dialogTrigger?.isConnected ? dialogTrigger : shortcutHelp
+        dialogTrigger = undefined
+        trigger.focus({ preventScroll: true })
+      }
+    })
+    fitProcess.addEventListener('click', () => {
+      if (processFitted) {
+        resetProcessSize()
+        draw()
+      } else fitProcessToWindow()
+    })
+    const closeExportOptions = () => {
+      exportOptions.open = false
+      by('export-toggle').focus()
+    }
+    exportOptions.addEventListener('keydown', event => {
+      if (event.key === 'Escape' && exportOptions.open) {
+        event.preventDefault()
+        closeExportOptions()
+      }
+    })
+    exportPng.addEventListener('click', () => {
+      closeExportOptions()
+      void exportTopology()
+    })
+    by('print-view').addEventListener('click', () => {
+      closeExportOptions()
+      window.print()
+    })
+    window.addEventListener('beforeprint', () => {
+      if (mode === 'overview') by('print-topology').innerHTML = serializeTopology()?.svg ?? ''
+      draw()
+      drawRelations()
+    })
+    window.addEventListener('afterprint', () => { by('print-topology').replaceChildren() })
     by('guide-toggle').addEventListener('click', () => {
       guide = guide ? null : { key: current.key, start: selected, edges: [] }
       showStep(selected)
@@ -1022,8 +1316,12 @@
     })
     document.addEventListener('keydown', event => {
       if (event.key === 'Escape' && activeTerm) hideTooltip()
+      handleShortcuts(event)
     })
-    window.addEventListener('resize', positionTooltip)
+    window.addEventListener('resize', () => {
+      positionTooltip()
+      if (processFitted) fitProcessToWindow(false)
+    })
     window.addEventListener('scroll', positionTooltip)
     restoreView()
     new ResizeObserver(draw).observe(graph)

@@ -3,7 +3,7 @@ import { lstat, readdir } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { parseArgs } from 'node:util'
-import { MAX_GRAPH_BYTES, parseGraph } from '../lib/graph.mjs'
+import { inspectGraph, MAX_GRAPH_BYTES, parseGraph } from '../lib/graph.mjs'
 import { diffGraphs, renderChangelog } from '../lib/graph-changelog.mjs'
 import { createLocalStore, readTextFile } from '../lib/local-store.mjs'
 import { exportObsidian } from '../lib/obsidian.mjs'
@@ -17,7 +17,7 @@ import { anchorSources } from '../lib/source-anchors.mjs'
 
 const help = [
   'Usage:',
-  '  dsh-threadlight validate <graph.json>',
+  '  dsh-threadlight validate <graph.json> [--json]',
   '  dsh-threadlight view <graph.json> <output-parent> [--source repository [--code-index executable]]',
   '  dsh-threadlight refresh [repository] [--patch path] [--dsh-cli path] [--code-index executable]',
   '  dsh-threadlight report [repository] [--code-index executable]',
@@ -155,6 +155,39 @@ async function changelogCommand() {
   }
 }
 
+function printValidation(result) {
+  console.log(JSON.stringify(result))
+  if (!result.ok) process.exitCode = 1
+}
+
+function printValidationFailure(code, message) {
+  printValidation({ ok: false, error: { code, path: '$', message: 'Invalid graph: ' + message } })
+}
+
+async function validateCommand() {
+  let parsed
+  try {
+    parsed = parseArgs({ args, allowPositionals: true, options: { json: { type: 'boolean' } } })
+    if (parsed.positionals.length !== 1 || !parsed.positionals[0]) throw new Error('expected one graph file')
+  } catch (error) {
+    const separator = args.indexOf('--')
+    if (!args.slice(0, separator === -1 ? args.length : separator).includes('--json')) throw new Error(help)
+    return printValidationFailure('graph/arguments', error.message)
+  }
+  const { values, positionals: [input] } = parsed
+  let raw
+  try { raw = await readTextFile(input, MAX_GRAPH_BYTES) } catch (error) {
+    if (!values.json) throw error
+    if (error.code === 'ERR_FILE_SIZE_LIMIT') return printValidationFailure('graph/input-size', error.message)
+    if (error.code === 'ERR_ENCODING_INVALID_ENCODED_DATA') return printValidationFailure('graph/json', 'expected UTF-8 JSON')
+    return printValidationFailure('graph/input-read', error.message)
+  }
+  const result = inspectGraph(raw)
+  if (values.json) return printValidation(result)
+  if (!result.ok) throw new Error(result.error.message)
+  console.log(JSON.stringify(result.summary))
+}
+
 async function run() {
   if (!command || command === '--help' || command === '-h') {
     console.log(help)
@@ -162,6 +195,7 @@ async function run() {
   }
   if (command === 'refresh' || command === 'watch') return updateCommand()
   if (command === 'changelog') return changelogCommand()
+  if (command === 'validate') return validateCommand()
   if (command === 'reset') {
     const { positionals } = parseArgs({ args, allowPositionals: true })
     if (positionals.length > 1) throw new Error(help)
@@ -197,16 +231,8 @@ async function run() {
     return
   }
   const [input, output, ...rest] = args
-  const validateOnly = command === 'validate' && input && !output
-  const shouldExport = command === 'export' && input && output && !rest.length
-  if (!validateOnly && !shouldExport) throw new Error(help)
+  if (command !== 'export' || !input || !output || rest.length) throw new Error(help)
   const graph = parseGraph(await readTextFile(input, MAX_GRAPH_BYTES))
-  if (validateOnly) {
-    const flows = graph.groups.flatMap(group => group.flows)
-    console.log(JSON.stringify({ groups: graph.groups.length, flows: flows.length,
-      nodes: flows.reduce((n, flow) => n + flow.nodes.length, 0), areas: graph.project.areas?.length ?? 0 }))
-    return
-  }
   const store = await createLocalStore(output)
   const result = await exportObsidian(graph, store, { output: '' })
   console.log(JSON.stringify({ ...result, directory: resolve(output, result.directory), overview: resolve(output, result.overview) }, null, 2))

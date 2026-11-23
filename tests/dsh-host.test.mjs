@@ -191,7 +191,10 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   assert.match(workspacesHtml, /data-state="issue">\s*<div class="workspace-meta">\s*<strong>Unreadable graph fixture<\/strong>/)
   assert.match(workspacesHtml, /id="workspace-search"/)
   assert.match(workspacesHtml, /id="workspace-filter"/)
-  assert.equal([...workspacesHtml.matchAll(/data-reset-workspace="([^"]+)"/g)].map(match => match[1]).join(), result.ws)
+  const graphActionIds = [...workspacesHtml.matchAll(/data-workspace="([^"]+)"/g)].map(match => match[1])
+  assert.ok(graphActionIds.includes(result.ws))
+  assert.match(workspacesHtml, /data-graph-mode="update"/)
+  assert.match(workspacesHtml, /data-graph-mode="regenerate"/)
   assert.match(await getPage(new URL('?workspace=missing', launcher)), /role="alert">找不到此工作区/)
   assert.match(html, /href="\?view=workspaces">切换工作区/)
   for (const asset of ['launch.js', 'launch.css']) {
@@ -208,6 +211,25 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   const creation = await created.json()
   assert.ok((await stat(join(home, newDirectory.folder))).isDirectory())
   assert.deepEqual(await (await post('workspaces', newDirectory)).json(), creation)
+  // "生成图谱" queues a real graph task instead of leaving an empty project.
+  const generateDirectory = { path: home, folder: '生成图谱目录', generate: '1' }
+  const generatedCreation = await post('workspaces', generateDirectory)
+  assert.equal(generatedCreation.status, 200, log.slice(-1500) + '\n' + await generatedCreation.clone().text())
+  const generatedWorkspace = await generatedCreation.json()
+  assert.ok(generatedWorkspace.session)
+  const generatedSession = await (await fetch(new URL('threadlight-fixture-session?id=' + generatedWorkspace.session, result.base), { headers: { cookie } })).json()
+  assert.match(JSON.stringify(generatedSession.prompts[0]), /生成 Threadlight 图谱/)
+  // Manual update and regenerate create their own queued tasks.
+  const updateTask = await post('graph-session', { workspace: generatedWorkspace.workspace, mode: 'update' })
+  assert.equal(updateTask.status, 200, await updateTask.clone().text())
+  const updateTaskBody = await updateTask.json()
+  assert.ok(updateTaskBody.session)
+  const updateSession = await (await fetch(new URL('threadlight-fixture-session?id=' + updateTaskBody.session, result.base), { headers: { cookie } })).json()
+  assert.match(JSON.stringify(updateSession.prompts[0]), /更新这个项目的 Threadlight 图谱/)
+  assert.equal((await post('graph-session', { workspace: generatedWorkspace.workspace, mode: 'nope' })).status, 400)
+  const regenerated = await post('graph-session', { workspace: generatedWorkspace.workspace, mode: 'regenerate' })
+  assert.equal(regenerated.status, 200, await regenerated.clone().text())
+  assert.ok((await regenerated.json()).session)
   const createdDraftHtml = await getPage(new URL('?' + new URLSearchParams(creation), launcher))
   assert.match(createdDraftHtml, /"hasGraph":false/)
   assert.match(createdDraftHtml, /新建目录/)
@@ -494,7 +516,11 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   assert.equal((await stat(join(workspace, archived, 'revisions', published.revision))).isDirectory(), true)
   assert.equal(await readFile(join(control, 'graph.json'), 'utf8'), example)
   assert.match(await readFile(join(control, 'annotations', group.id, savedNote.id + '.json'), 'utf8'), /safe note/)
-  assert.doesNotMatch(await getPage(workspaceList), /data-reset-workspace=/)
+  // After archiving, that workspace opens as a draft again; the graph-task
+  // entry points stay available because a draft can still be regenerated.
+  const afterReset = await getPage(workspaceList)
+  assert.ok(afterReset.includes('data-workspace="' + result.ws + '"'), 'graph actions missing after reset')
+  assert.match(afterReset, /打开草稿/)
   const version = JSON.parse(await readFile(join(cli, 'package.json'), 'utf8')).version
   t.diagnostic('DSH ' + version + ', web profile, filesystem sandbox mode ' + (result.mode ?? '(none)'))
 })
