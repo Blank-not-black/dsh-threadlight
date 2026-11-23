@@ -2,6 +2,20 @@
 
 `-dev.N` 为开发版，接口仍可能调整。
 
+## 0.1.0-dev.12
+
+### 新增
+
+- **对话里的 Threadlight 卡片**。agent 调用 `threadlight_graph`、`threadlight_annotate` 或 `threadlight_export` 时，会话里显示带 Threadlight 图标与运行状态的结构化卡片：折叠行给出工具与摘要，展开可看完整输出，按钮直接打开对应项目的图谱或批注箱。卡片通过宿主 `tool.call.toolview` 键控插槽注册，只有当前 DSH 组合提供该插槽时生效；没有时仍显示通用工具行。
+- **输入框下方的项目状态**。会话输入框下方新增 Threadlight 状态胶囊：显示当前会话所属项目的模块数和待处理批注数，点击打开批注箱（有待处理批注）或图谱。项目没有图谱时不渲染；面板打开期间每 20 秒和窗口重新聚焦时刷新。Host 为此新增 `GET /threadlight/api/summary?session=`。
+- **按模块并行提交批注**。批注箱每个模块可以单独选择 DSH agent preset，把不同模块交给不同 agent；选中多个模块提交时，每个模块各建一个会话并行执行，模块之间互不阻塞。部分失败时成功模块已标记提交、失败模块保留勾选并在页脚列出原因，可直接重试。Host 新增 `GET /threadlight/api/agent-presets?workspace=`，提交回执记录模块和 preset；同一模块的相同批注重复提交仍复用原会话。
+
+### 改进
+
+- 批注箱：模块标题行增加 agent 选择器（按工作区记住选择，preset 不可用或服务缺失时自动隐藏），提交按钮显示「并行提交到 N 个模块」，部分失败有独立失败列表。
+- 客户端 bundle 增加回归用例 `tests/dsh-client.test.mjs`：用模拟的宿主模块表与 React 运行时检查插槽注册、会话记忆、卡片摘要与展开。
+- `llms.txt` 补充 `threadlight_graph`、`threadlight_annotate` 以及按模块并行提交的说明。
+
 ## 0.1.0-dev.11
 
 ### 新增

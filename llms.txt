@@ -51,7 +51,11 @@ node bin/dsh-threadlight.mjs export  <graph.json> <out-dir>      # Obsidian 笔�
 
 - 技能 `threadlight-map-project`：首次把项目梳理成图谱（用户说「用 Threadlight 梳理一下这个项目」时使用）。
 - 技能 `threadlight-document-project`：由 `refresh` 在 headless 会话中调用，读写 `.threadlight/input.json` 与 `update.json`，不要手动调用。
+- 工具 `threadlight_graph`：用 overview / flow / step / search 四种视图读取当前工作区图谱的紧凑结构，用来定位线路与步骤，不必整份读 graph.json。
+- 工具 `threadlight_annotate`：把用户反馈写进当前工作区的批注箱；只允许写批注，不会改图谱。
 - 工具 `threadlight_export`：把当前工作区 `.threadlight/graph.json` 导出到 Obsidian。
+
+用户在 Threadlight 页面提交批注时，DSH 会按模块分别建立会话（每个模块可指定 agent preset），线程并行处理；回复里按批注编号报告改动位置和实际验证结果。
 
 ## 契约与文档
 

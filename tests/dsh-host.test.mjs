@@ -402,6 +402,91 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   assert.equal(refreshedNotes.get(flowNote.id).submitted, null)
   assert.deepEqual(JSON.parse(await readFile(noteFile(updated.id), 'utf8')), { ...updated, module: group.id, graph: digest })
 
+  // Session-scoped summary: the host resolves the session to its workspace,
+  // reports graph counts and marks annotations already covered by a receipt.
+  const summaryUrl = new URL('threadlight/api/summary?session=' + noteReceipt.sessionId, result.base)
+  assert.equal((await fetch(summaryUrl)).status, 401)
+  const summaryReply = await fetch(summaryUrl, { headers: { cookie } })
+  assert.equal(summaryReply.status, 200, await summaryReply.clone().text())
+  const summary = await summaryReply.json()
+  assert.deepEqual(summary.workspace, { id: reviewWorkspace, title: 'Review fixture' })
+  assert.equal(summary.graph.project, data.project.name)
+  assert.equal(summary.graph.digest, digest)
+  assert.equal(summary.graph.published, true)
+  assert.equal(summary.graph.areas, exampleGraph.project.areas.length)
+  assert.equal(summary.graph.groups, exampleGraph.groups.length)
+  assert.equal(summary.graph.flows, exampleGraph.groups.reduce((total, entry) => total + entry.flows.length, 0))
+  assert.equal(summary.graph.steps, exampleGraph.groups.reduce((total, entry) =>
+    total + entry.flows.reduce((count, entryFlow) => count + entryFlow.nodes.length, 0), 0))
+  // Two notes were submitted by noteReceipt; the orphan note keeps a directory
+  // the summary still counts as pending.
+  assert.deepEqual(summary.notes, { total: 4, pending: 2, submitted: 2 })
+  const unknownSummarySession = await fetch(new URL('threadlight/api/summary?session=' + randomUUID(), result.base),
+    { headers: { cookie } })
+  assert.equal(unknownSummarySession.status, 404)
+  assert.equal((await fetch(new URL('threadlight/api/summary', result.base),
+    { method: 'POST', headers: { cookie } })).status, 405)
+
+  const presetsUrl = new URL('threadlight/api/agent-presets?' + new URLSearchParams({ workspace: reviewWorkspace }), result.base)
+  const presetsReply = await fetch(presetsUrl, { headers: { cookie } })
+  assert.equal(presetsReply.status, 200, await presetsReply.clone().text())
+  const roster = await presetsReply.json()
+  assert.ok(Array.isArray(roster.presets))
+  assert.equal((await fetch(new URL('threadlight/api/agent-presets?' + new URLSearchParams({ workspace: 'missing' }), result.base),
+    { headers: { cookie } })).status, 404)
+  assert.equal((await fetch(presetsUrl, { method: 'POST', headers: { cookie } })).status, 405)
+  if (roster.unavailable) {
+    assert.deepEqual(roster, { presets: [], default: null, unavailable: true })
+  } else {
+    assert.ok(roster.presets.length > 0)
+    assert.equal(typeof roster.default, 'string')
+    for (const preset of roster.presets) {
+      assert.equal(typeof preset.id, 'string')
+      assert.equal(typeof preset.isDefault, 'boolean')
+      if (preset.isDefault) assert.equal(preset.id, roster.default)
+      if (preset.broken !== undefined) assert.equal(typeof preset.broken, 'string')
+    }
+  }
+
+  // A retried submission routed through the grouped path reuses the receipt and
+  // reports the module fields while keeping the legacy top-level submission.
+  const groupedRetry = await submitNotes({ modules: {} })
+  assert.equal(groupedRetry.status, 200, await groupedRetry.clone().text())
+  const grouped = await groupedRetry.json()
+  assert.ok(Array.isArray(grouped.submissions))
+  assert.ok(Array.isArray(grouped.failures))
+  assert.deepEqual(grouped.failures, [])
+  assert.equal(grouped.submissions.length, 1)
+  const [groupedSubmission] = grouped.submissions
+  assert.equal(groupedSubmission.sessionId, noteReceipt.sessionId)
+  assert.deepEqual(groupedSubmission.noteIds, noteReceipt.noteIds)
+  assert.equal(groupedSubmission.digest, noteReceipt.digest)
+  assert.equal(groupedSubmission.submittedAt, noteReceipt.submittedAt)
+  assert.equal(groupedSubmission.module, group.id)
+  assert.equal(groupedSubmission.groupTitle, group.title)
+  assert.equal('agentPreset' in groupedSubmission, false)
+  assert.deepEqual(grouped.submission, groupedSubmission)
+  for (const modules of [{ 'missing-module': 'standard' }, [], 'standard', null]) {
+    assert.equal((await submitNotes({ modules })).status, 400)
+  }
+  assert.equal((await submitNotes({ modules: { [group.id]: 'missing-preset-id' } })).status,
+    roster.unavailable ? 503 : 400)
+
+  // When the deployment exposes a preset roster, a module can explicitly run a
+  // different agent; the response echoes the assigned preset.
+  const rosterPreset = roster.unavailable ? null : roster.presets.find(preset => !preset.broken)
+  if (rosterPreset) {
+    const presetReply = await submitNotes({ ids: [flowNote.id], modules: { [group.id]: rosterPreset.id } })
+    assert.equal(presetReply.status, 200, await presetReply.clone().text())
+    const presetResult = await presetReply.json()
+    assert.deepEqual(presetResult.failures, [])
+    assert.equal(presetResult.submissions.length, 1)
+    assert.deepEqual(presetResult.submissions[0].noteIds, [flowNote.id])
+    assert.equal(presetResult.submissions[0].module, group.id)
+    assert.equal(presetResult.submissions[0].agentPreset, rosterPreset.id)
+    assert.equal(presetResult.submission.agentPreset, rosterPreset.id)
+  }
+
   assert.deepEqual(await (await mutate('DELETE')).json(), { deleted: true })
   await assert.rejects(readFile(noteFile(stepNote.id)), { code: 'ENOENT' })
   assert.equal((await mutate('PATCH', { text: '不得重建' })).status, 404)
