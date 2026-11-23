@@ -67,6 +67,7 @@ function loadOverview(graph, { review = false, clientHeight = 320, reply = () =>
       return {
         add: name => { classes.add(name); write() },
         remove: name => { classes.delete(name); write() },
+        contains: name => classes.has(name),
         toggle: (name, force) => { if (force) classes.add(name); else classes.delete(name); write() },
       }
     }
@@ -687,6 +688,88 @@ test('the annotation inbox selects by module and marks the notes identified in a
   assert.deepEqual(first.querySelectorAll('.submitted').map(badge => badge.textContent), Array(2).fill('已提交 · 会话 new-sess'))
   assert.equal(second.querySelector('.submitted').textContent, '已提交 · 会话 older-se')
   assert.equal(by('selected').textContent, '已选 0 条')
+})
+
+test('the annotation inbox edits, cancels, and deletes notes with the current digest', async () => {
+  const { by, document } = loadOverview(graphWithAreas())
+  const createdAt = '2026-11-22T00:00:00.000Z'
+  const updatedAt = '2026-11-23T00:00:00.000Z'
+  const notes = [
+    { id: 'one', group: 'first', groupTitle: '模块一', target: { kind: 'group' }, text: '第一条', createdAt, submitted: null },
+    { id: 'two', group: 'first', groupTitle: '模块一', target: { kind: 'step' }, flowTitle: '线路', stepTitle: '步骤',
+      text: '第二条', quote: '引用', createdAt, submitted: null },
+    { id: 'three', group: 'second', groupTitle: '模块二', target: { kind: 'group' }, text: '第三条', createdAt, submitted: null },
+  ]
+  by('notes-context').textContent = JSON.stringify({ workspace: 'inbox', digest: 'current', project: '示例', maxSelection: 100 })
+  const calls = []
+  let confirmed = false
+  runInNewContext(notesScript, { document, URLSearchParams, confirm: () => confirmed, async fetch(url, options) {
+    if (url.startsWith('api/agent-presets')) return { ok: true, json: async () => ({ unavailable: true }) }
+    const body = options.body ? JSON.parse(options.body) : null
+    calls.push([url, options.method ?? 'GET', body, options.headers])
+    if (!options.method) return { ok: true, json: async () => ({ notes }) }
+    if (options.method === 'PATCH') return { ok: true, json: async () => ({
+      note: { id: body.id, text: body.text, createdAt, updatedAt, target: { kind: 'group' } },
+    }) }
+    return { ok: true, json: async () => ({ deleted: true }) }
+  } })
+  await setImmediate()
+  const [first, second] = by('groups').children
+  const [one, two] = first.querySelectorAll('li')
+  const control = (row, label) => row.querySelectorAll('button').find(button => button.textContent === label)
+  assert.equal(by('total').textContent, '3 条批注')
+  one.querySelector('input').checked = true
+  one.querySelector('input').dispatch('change')
+  assert.equal(by('selected').textContent, '已选 1 条')
+  assert.equal(by('submit').disabled, false)
+
+  control(one, '修改').click()
+  assert.equal(by('submit').disabled, true)
+  assert.equal(control(two, '修改').disabled, true)
+  const cancelled = one.querySelector('textarea')
+  cancelled.value = '不应保存'
+  control(one, '取消').click()
+  assert.equal(one.querySelector('p').textContent, '第一条')
+  assert.equal(by('submit').disabled, false)
+  assert.equal(control(two, '修改').disabled, false)
+  assert.equal(calls.length, 1)
+
+  control(one, '修改').click()
+  const editor = one.querySelector('textarea')
+  assert.equal(editor.value, '第一条')
+  editor.value = '第一条（改）'
+  control(one, '保存修改').click()
+  await setImmediate()
+  assert.deepEqual(calls.at(-1).slice(0, 3), ['api/annotations', 'PATCH',
+    { workspace: 'inbox', digest: 'current', group: 'first', id: 'one', text: '第一条（改）' }])
+  assert.equal(calls.at(-1)[3]['x-threadlight-client'], 'review')
+  assert.equal(one.querySelector('p').textContent, '第一条（改）')
+  assert.match(one.querySelector('time').textContent, /^修改于 /)
+  assert.equal(by('submit').disabled, false)
+
+  const beforeCancel = calls.length
+  control(one, '删除').click()
+  assert.equal(calls.length, beforeCancel)
+  assert.ok(one.parentElement)
+  confirmed = true
+  control(one, '删除').click()
+  await setImmediate()
+  assert.deepEqual(calls.at(-1).slice(0, 3), ['api/annotations', 'DELETE',
+    { workspace: 'inbox', digest: 'current', group: 'first', id: 'one' }])
+  assert.equal(first.querySelectorAll('li').length, 1)
+  assert.equal(by('selected').textContent, '已选 0 条')
+  assert.equal(by('total').textContent, '2 条批注')
+
+  control(two, '删除').click()
+  await setImmediate()
+  assert.equal(by('groups').children.length, 1)
+  assert.equal(by('total').textContent, '1 条批注')
+  control(second.querySelector('li'), '删除').click()
+  await setImmediate()
+  assert.equal(by('groups').children.length, 0)
+  assert.equal(by('total').textContent, '0 条批注')
+  assert.equal(by('empty').hidden, false)
+  assert.equal(document.body.classList.contains('is-empty'), true)
 })
 
 test('relation wires are an overlay instead of a third grid cell', () => {

@@ -393,6 +393,8 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   assert.equal(noteEvents.prompts.length, 1)
   const queuedNotes = JSON.stringify(noteEvents.prompts[0])
   assert.match(queuedNotes, /用户只提交了批注，没有修改流程图/)
+  assert.match(queuedNotes, /你担任主会话/)
+  assert.match(queuedNotes, /subagent 工具为每个模块启动一个子代理/)
   assert.ok(queuedNotes.includes(savedNote.text))
   assert.ok(queuedNotes.includes(updated.text))
   assert.equal(noteEvents.prompts[0].source.rpcId, noteReceipt.requestId)
@@ -448,43 +450,29 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
     }
   }
 
-  // A retried submission routed through the grouped path reuses the receipt and
-  // reports the module fields while keeping the legacy top-level submission.
-  const groupedRetry = await submitNotes({ modules: {} })
-  assert.equal(groupedRetry.status, 200, await groupedRetry.clone().text())
-  const grouped = await groupedRetry.json()
-  assert.ok(Array.isArray(grouped.submissions))
-  assert.ok(Array.isArray(grouped.failures))
-  assert.deepEqual(grouped.failures, [])
-  assert.equal(grouped.submissions.length, 1)
-  const [groupedSubmission] = grouped.submissions
-  assert.equal(groupedSubmission.sessionId, noteReceipt.sessionId)
-  assert.deepEqual(groupedSubmission.noteIds, noteReceipt.noteIds)
-  assert.equal(groupedSubmission.digest, noteReceipt.digest)
-  assert.equal(groupedSubmission.submittedAt, noteReceipt.submittedAt)
-  assert.equal(groupedSubmission.module, group.id)
-  assert.equal(groupedSubmission.groupTitle, group.title)
-  assert.equal('agentPreset' in groupedSubmission, false)
-  assert.deepEqual(grouped.submission, groupedSubmission)
-  for (const modules of [{ 'missing-module': 'standard' }, [], 'standard', null]) {
-    assert.equal((await submitNotes({ modules })).status, 400)
+  // Repeating the submission reuses both the receipt and its main session; the
+  // prompt already asks that session to coordinate one child per module.
+  const repeated = await submitNotes({ agentPreset: roster.presets?.find(preset => !preset.broken)?.id })
+  assert.equal(repeated.status, 200, await repeated.clone().text())
+  assert.deepEqual(await repeated.json(), { submission: noteReceipt })
+  for (const agentPreset of [42, [], {}]) {
+    assert.equal((await submitNotes({ agentPreset })).status, 400)
   }
-  assert.equal((await submitNotes({ modules: { [group.id]: 'missing-preset-id' } })).status,
+  assert.equal((await submitNotes({ agentPreset: 'missing-preset-id' })).status,
     roster.unavailable ? 503 : 400)
 
-  // When the deployment exposes a preset roster, a module can explicitly run a
-  // different agent; the response echoes the assigned preset.
+  // A preset chosen for the main session reaches session creation, and the
+  // receipt keeps both the preset and the delegated module plan.
   const rosterPreset = roster.unavailable ? null : roster.presets.find(preset => !preset.broken)
   if (rosterPreset) {
-    const presetReply = await submitNotes({ ids: [flowNote.id], modules: { [group.id]: rosterPreset.id } })
+    const presetReply = await submitNotes({ ids: [flowNote.id], agentPreset: rosterPreset.id })
     assert.equal(presetReply.status, 200, await presetReply.clone().text())
-    const presetResult = await presetReply.json()
-    assert.deepEqual(presetResult.failures, [])
-    assert.equal(presetResult.submissions.length, 1)
-    assert.deepEqual(presetResult.submissions[0].noteIds, [flowNote.id])
-    assert.equal(presetResult.submissions[0].module, group.id)
-    assert.equal(presetResult.submissions[0].agentPreset, rosterPreset.id)
-    assert.equal(presetResult.submission.agentPreset, rosterPreset.id)
+    const { submission: presetSubmission } = await presetReply.json()
+    assert.deepEqual(presetSubmission.noteIds, [flowNote.id])
+    assert.equal(presetSubmission.agentPreset, rosterPreset.id)
+    assert.deepEqual(presetSubmission.modules, [{ id: group.id, title: group.title }])
+    assert.match(presetSubmission.prompt, /你担任主会话/)
+    assert.match(presetSubmission.prompt, /subagent 工具为每个模块启动一个子代理/)
   }
 
   assert.deepEqual(await (await mutate('DELETE')).json(), { deleted: true })

@@ -186,12 +186,12 @@ test('client bundle registers the panel, session header, chat cards and composer
   assert.deepEqual({ ...dock[0].options.inject('session-1') }, { sessionId: 'session-1' })
 })
 
-test('the header action remembers the session and opens the annotation inbox', () => {
+test('the header action remembers the session and opens the project overview', () => {
   const plugin = loadPlugin()
   const HeaderAction = plugin.registered('conversation.session.header.actions')[0].Component
   const app = plugin.mount(HeaderAction, { sessionId: 'session-1' })
   const button = find(app.tree, node => node.type === 'button')
-  assert.equal(button.props['aria-label'], 'Threadlight 批注箱')
+  assert.equal(button.props['aria-label'], 'Threadlight 功能总览')
   button.props.onClick()
   assert.deepEqual(plugin.calls.at(-1), { type: 'selectPanel', name: 'dsh-threadlight' })
   assert.equal(plugin.storage.get('threadlight.session'), 'session-1')
@@ -200,7 +200,7 @@ test('the header action remembers the session and opens the annotation inbox', (
   const panel = plugin.mount(Panel, {})
   const iframe = find(panel.tree, node => node.type === 'iframe')
   assert.match(iframe.props.src, /session=session-1/)
-  assert.match(iframe.props.src, /view=notes/)
+  assert.doesNotMatch(iframe.props.src, /view=notes|notes=/)
 })
 
 test('annotate cards show the receipt, expand the durable output and open the inbox', () => {

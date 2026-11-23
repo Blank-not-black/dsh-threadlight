@@ -30,9 +30,12 @@
     <p id="status" role="status">正在读取批注…</p>
     <div class="submit-actions">
       <span id="selected">已选 0 条</span>
+      <label id="agent-picker" class="preset-picker" hidden>
+        <span class="preset-caption">主会话 Agent</span>
+        <select id="agent-preset" aria-label="本次任务的主会话 agent"></select>
+      </label>
       <button type="button" id="submit" class="primary" disabled>提交给 DSH</button>
     </div>
-    <div id="failures" class="failures" role="alert" hidden></div>
   </footer>
 </body>
 </html>

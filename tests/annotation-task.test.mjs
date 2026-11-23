@@ -2,8 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
-import { collectionPrompt, listSubmissionIndex, selectionDigest, submitAnnotations,
-  submitModuleAnnotations } from '../lib/annotation-task.mjs'
+import { coordinationPrompt, listSubmissionIndex, selectionDigest, submitAnnotations } from '../lib/annotation-task.mjs'
 
 const graph = JSON.parse(await readFile(new URL('../examples/basic.graph.json', import.meta.url), 'utf8'))
 const multiGraph = JSON.parse(await readFile(new URL('../examples/architecture.graph.json', import.meta.url), 'utf8'))
@@ -17,40 +16,55 @@ const notes = [
   { ...base, id: randomUUID(), text: '修正这一步。\n保留第二行。', quote: ' 引用\r\n\t原文 ',
     target: { kind: 'step', flow: flow.id, step: step.id } },
 ]
-const contextOf = prompt => JSON.parse(prompt.slice(prompt.indexOf('\n\n') + 2))
+const contextOf = prompt => JSON.parse(prompt.slice(prompt.lastIndexOf('\n') + 1))
 
-test('annotation prompts include original feedback, numbered targets and source locations', () => {
+// Normalized note fixtures mirror what taskNotes hands to the prompt builder.
+function promptNotes(graphValue, selected) {
+  const groups = new Map(graphValue.groups.map(group => [group.id, group]))
+  return selected.map((note, i) => {
+    const group = groups.get(note.module)
+    const target = note.target ?? { kind: 'group' }
+    const flowRecord = target.kind === 'group' ? undefined : group.flows.find(entry => entry.id === target.flow)
+    const stepRecord = target.kind === 'step' ? flowRecord?.nodes.find(node => node.id === target.step) : undefined
+    return { id: note.id, index: i + 1, groupId: group.id, groupTitle: group.title,
+      flowId: flowRecord?.id, flowTitle: flowRecord?.title, stepId: stepRecord?.id, stepTitle: stepRecord?.title,
+      targetKind: target.kind, text: note.text, quote: note.quote, createdAt: note.createdAt,
+      sources: stepRecord?.sources.map(({ path, kind, line }) => ({ path, kind, line })) ??
+        (flowRecord ? [{ path: 'lib/graph.mjs', kind: 'source', line: 1 }] : [{ path: 'README.md', kind: 'documentation' }]) }
+  })
+}
+
+test('coordination prompts ask one main session to delegate per module and keep the original feedback', () => {
   const graph = structuredClone(source.graph)
   const [first, second] = graph.groups[0].flows[0].nodes
   first.sources[0].line = 3
-  first.sources[0].preview = { text: 'omit source preview' }
   second.sources.unshift({ ...first.sources[0] })
-  second.sources.push(...Array.from({ length: 24 }, (_, i) => ({ path: 'extra.mjs', kind: 'source', line: i + 1 })))
-  const prompt = collectionPrompt({ ...source, graph }, notes, { workspaceTitle: '审阅工作区' })
-  assert.match(prompt, /^用户只提交了批注，没有修改流程图。/)
-  assert.match(prompt, /先阅读相关源码确认现状.*逐条处理批注/)
-  assert.match(prompt, /按批注编号报告改动位置、实际运行的验证及结果/)
+  const selection = notes.map(note => ({ ...note }))
+  const prompt = coordinationPrompt({ ...source, graph }, promptNotes(graph, selection), { workspaceTitle: '审阅工作区' })
+  assert.match(prompt, /你担任主会话/)
+  assert.match(prompt, /subagent 工具为每个模块启动一个子代理/)
+  assert.match(prompt, /同时最多 3 个/)
+  assert.match(prompt, /按批注编号报告改动位置与验证结果/)
+  assert.match(prompt, /不要只转述子代理的话/)
   const context = contextOf(prompt)
-  assert.deepEqual({ ...context, notes: undefined }, {
-    project: graph.project.name, digest: source.digest, workspace: '审阅工作区', notes: undefined,
+  assert.deepEqual({ ...context, modules: undefined }, {
+    project: graph.project.name, digest: source.digest, workspace: '审阅工作区',
+    moduleCount: 1, noteCount: 3, modules: undefined,
   })
-  assert.deepEqual(context.notes.map(({ sources, ...entry }) => entry), [
-    { index: 1, groupId: module, groupTitle, targetKind: 'group', text: notes[0].text, createdAt: base.createdAt },
-    { index: 2, groupId: module, groupTitle, flowId: flow.id, flowTitle: flow.title,
+  assert.equal(context.modules.length, 1)
+  assert.equal(context.modules[0].id, module)
+  assert.equal(context.modules[0].title, groupTitle)
+  assert.deepEqual(context.modules[0].notes.map(({ sources, ...entry }) => entry), [
+    { id: selection[0].id, index: 1, groupId: module, groupTitle, targetKind: 'group', text: notes[0].text,
+      createdAt: base.createdAt },
+    { id: selection[1].id, index: 2, groupId: module, groupTitle, flowId: flow.id, flowTitle: flow.title,
       targetKind: 'flow', text: notes[1].text, createdAt: base.createdAt },
-    { index: 3, groupId: module, groupTitle, flowId: flow.id, flowTitle: flow.title, stepId: step.id, stepTitle: step.title,
-      targetKind: 'step', text: notes[2].text, quote: notes[2].quote, createdAt: base.createdAt },
+    { id: selection[2].id, index: 3, groupId: module, groupTitle, flowId: flow.id, flowTitle: flow.title,
+      stepId: step.id, stepTitle: step.title, targetKind: 'step', text: notes[2].text, quote: notes[2].quote,
+      createdAt: base.createdAt },
   ])
-  const [groupSources, flowSources, stepSources] = context.notes.map(note => note.sources)
-  assert.deepEqual(stepSources, [{ path: 'lib/graph.mjs', kind: 'source', line: 3 }])
-  assert.equal(flowSources.length, 20)
-  assert.equal(new Set(flowSources.map(entry => JSON.stringify(entry))).size, 20)
-  assert.deepEqual(flowSources.slice(0, 2), [...stepSources, { path: 'lib/obsidian.mjs', kind: 'source' }])
-  assert.deepEqual(groupSources, flowSources.slice(0, 5))
+  assert.deepEqual(context.modules[0].notes[2].sources, [{ path: 'lib/graph.mjs', kind: 'source', line: 3 }])
   assert.doesNotMatch(prompt, /details|omit source preview/)
-  for (const selection of [[], Array(101).fill(notes[0])]) {
-    assert.throws(() => collectionPrompt(source, selection, { workspaceTitle: 'fixture' }), { status: 400 })
-  }
 })
 
 test('annotation selection digests identify ID sets independent of order', () => {
@@ -61,13 +75,11 @@ test('annotation selection digests identify ID sets independent of order', () =>
   assert.notEqual(digest, selectionDigest([two, three]))
 })
 
-function fixture({ graph = source.graph, digest = source.digest, createDelay = 0 } = {}) {
+function fixture({ graph = source.graph, digest = source.digest } = {}) {
   const files = new Map()
-  const workGraph = { graph, digest }
   const workspace = { id: randomUUID(), path: 'workspace/' + randomUUID(), title: 'Fixture', sessionIds: [] }
   const prompts = [], titles = [], creates = []
-  const rejected = new Set()
-  let accepted = true, active = 0, highWater = 0
+  let accepted = true
   const store = {
     async read(path) {
       const value = files.get(path)
@@ -87,13 +99,6 @@ function fixture({ graph = source.graph, digest = source.digest, createDelay = 0
   const controller = {
     async create(args) {
       assert.equal(args.workspaceId, workspace.id)
-      active++
-      highWater = Math.max(highWater, active)
-      try {
-        if (createDelay) await new Promise(resolve => setTimeout(resolve, createDelay))
-      } finally {
-        active--
-      }
       creates.push(args)
       workspace.sessionIds.push(args.sessionId)
       return { sessionId: args.sessionId, ...(args.agentPreset ? { agentPreset: args.agentPreset } : {}) }
@@ -103,38 +108,52 @@ function fixture({ graph = source.graph, digest = source.digest, createDelay = 0
       assert.equal(args.mode, 'queue')
       assert.ok(signal instanceof AbortSignal)
       prompts.push(args)
-      const text = args.content[0].text
-      return { accepted: accepted && ![...rejected].some(fragment => text.includes(fragment)) }
+      return { accepted }
     },
   }
-  return { files, store, workspace, controller, prompts, titles, creates, source: workGraph,
-    maxActive: () => highWater,
-    rejectWhen(fragment) { rejected.add(fragment) },
-    acceptAll() { accepted = true; rejected.clear() },
+  return { files, store, workspace, controller, prompts, titles, creates, graph,
     accept(value) { accepted = value },
-    submit: selected => submitAnnotations({ workspace, graph: workGraph, notes: selected, store, controller }),
-    submitModules: (selected, plan, presets) => submitModuleAnnotations({ workspace, graph: workGraph,
-      notes: selected, controller, store, presets, plan }) }
+    submit: (selected, options = {}) => submitAnnotations({ workspace, graph: { graph, digest }, notes: selected,
+      store, controller, ...options }) }
 }
 
-test('annotation submissions coalesce concurrent and repeated requests for the same IDs', async () => {
-  const { submit, files, workspace, prompts, titles } = fixture()
-  const selection = [notes[2], notes[0]]
-  const [first, concurrent] = await Promise.all([submit(selection), submit([...selection].reverse())])
-  assert.deepEqual(concurrent, first)
-  const { submission } = first
-  assert.deepEqual(await submit([...selection].reverse()), first)
-  assert.deepEqual(workspace.sessionIds, [submission.sessionId])
+function moduleNotes(...groups) {
+  const createdAt = '2026-11-22T05:00:00.000Z'
+  return groups.map((group, index) => ({ module: group.id, id: randomUUID(),
+    text: '模块 ' + group.title + ' 的批注 ' + (index + 1) + '。', createdAt }))
+}
+
+test('one main session receives every module and delegates; receipts keep the module plan', async () => {
+  const graph = structuredClone(multiGraph)
+  const [first, second] = graph.groups
+  const [firstNote, secondNote, followUp] = moduleNotes(first, second, first)
+  const { submit, files, workspace, prompts, creates, titles } = fixture({ graph, digest: 'multi-module-digest' })
+  const selection = [firstNote, secondNote, followUp]
+  const { submission } = await submit(selection, { presets: [{ id: 'focused', name: 'Focused' }], agentPreset: 'focused' })
+  assert.equal(creates.length, 1, 'one main session owns the batch')
+  assert.equal(creates[0].agentPreset, 'focused')
+  assert.equal(workspace.sessionIds.length, 1)
   assert.deepEqual(submission.noteIds, selection.map(note => note.id).sort())
-  assert.equal(submission.workspace, workspace.id)
-  assert.equal(submission.schemaVersion, 1)
-  assert.equal(submission.requestId, prompts[0].requestId)
-  assert.equal(submission.prompt, prompts[0].content[0].text)
-  assert.deepEqual(titles, [{ sessionId: submission.sessionId, title: 'Threadlight 批注 · ' + flow.title + ' · 2 条' }])
-  assert.deepEqual(JSON.parse(files.get('.threadlight/submissions/' + submission.digest + '.json')), submission)
-  const different = await submit([notes[1]])
-  assert.notEqual(different.submission.sessionId, submission.sessionId)
-  assert.equal(prompts.length, 2)
+  assert.equal(submission.sessionId, creates[0].sessionId)
+  assert.deepEqual([...submission.modules].map(({ id }) => id).sort(), [first.id, second.id].sort())
+  assert.equal(submission.agentPreset, 'focused')
+  const prompt = prompts[0].content[0].text
+  assert.match(prompt, /你担任主会话/)
+  assert.match(prompt, /subagent 工具为每个模块启动一个子代理/)
+  const context = contextOf(prompt)
+  assert.equal(context.moduleCount, 2)
+  assert.equal(context.noteCount, 3)
+  assert.deepEqual(context.modules.map(module => module.notes.length), [2, 1])
+  assert.equal(titles[0].title, 'Threadlight 批注 · 2 个模块 · 3 条')
+  const receipt = JSON.parse(files.get('.threadlight/submissions/' + submission.digest + '.json'))
+  assert.deepEqual(receipt, submission)
+  assert.deepEqual(receipt.modules.map(module => module.id).sort(), [first.id, second.id].sort())
+  // Repeating the same selection (any order) reuses the receipt and the session.
+  const repeated = await submit([followUp, secondNote, firstNote],
+    { presets: [{ id: 'focused', name: 'Focused' }], agentPreset: 'focused' })
+  assert.deepEqual(repeated, { submission })
+  assert.equal(creates.length, 1)
+  assert.equal(prompts.length, 1)
 })
 
 test('a rejected annotation task leaves no receipt and a retry uses the original request', async () => {
@@ -163,120 +182,14 @@ test('annotation receipt indexing skips invalid records and pending files', asyn
   }])))
 })
 
-function moduleNotes(...groups) {
-  const createdAt = '2026-11-22T05:00:00.000Z'
-  return groups.map((group, index) => ({ module: group.id, id: randomUUID(),
-    text: '模块 ' + group.title + ' 的批注 ' + (index + 1) + '。', createdAt }))
-}
-
-test('module submissions group notes, run modules in parallel and record agent presets', async () => {
-  const graph = structuredClone(multiGraph)
-  const [first, second] = graph.groups
-  const [firstNote, secondNote, followUp] = moduleNotes(first, second, first)
-  const { submitModules, files, workspace, prompts, creates, maxActive } =
-    fixture({ graph, digest: 'multi-module-digest', createDelay: 20 })
-  const presets = [{ id: 'standard', isDefault: true }, { id: 'focused', name: 'Focused' }]
-  const selection = [firstNote, secondNote, followUp]
-  const result = await submitModules(selection, { [first.id]: 'focused', [second.id]: null }, presets)
-  assert.deepEqual(result.failures, [])
-  assert.equal(result.submissions.length, 2)
-  assert.equal(creates.length, 2)
-  assert.equal(workspace.sessionIds.length, 2)
-  assert.equal(maxActive(), 2)
-  const byModule = new Map(result.submissions.map(entry => [entry.module, entry]))
-  const firstSubmission = byModule.get(first.id)
-  const secondSubmission = byModule.get(second.id)
-  assert.equal(firstSubmission.groupTitle, first.title)
-  assert.equal(secondSubmission.groupTitle, second.title)
-  assert.deepEqual(firstSubmission.noteIds, [firstNote.id, followUp.id].sort())
-  assert.deepEqual(secondSubmission.noteIds, [secondNote.id])
-  assert.equal(firstSubmission.digest, selectionDigest([firstNote.id, followUp.id]))
-  assert.equal(secondSubmission.digest, selectionDigest([secondNote.id]))
-  assert.equal(firstSubmission.agentPreset, 'focused')
-  assert.equal('agentPreset' in secondSubmission, false)
-  assert.notEqual(firstSubmission.sessionId, secondSubmission.sessionId)
-  assert.ok(Number.isFinite(Date.parse(firstSubmission.submittedAt)))
-  const createsBySession = new Map(creates.map(entry => [entry.sessionId, entry]))
-  assert.equal(createsBySession.get(firstSubmission.sessionId).agentPreset, 'focused')
-  assert.equal('agentPreset' in createsBySession.get(secondSubmission.sessionId), false)
-  const firstReceipt = JSON.parse(files.get('.threadlight/submissions/' + firstSubmission.digest + '.json'))
-  assert.equal(firstReceipt.module, first.id)
-  assert.equal(firstReceipt.agentPreset, 'focused')
-  assert.deepEqual(firstReceipt.noteIds, firstSubmission.noteIds)
-  const secondReceipt = JSON.parse(files.get('.threadlight/submissions/' + secondSubmission.digest + '.json'))
-  assert.equal(secondReceipt.module, second.id)
-  assert.equal('agentPreset' in secondReceipt, false)
-  const contexts = prompts.map(args => contextOf(args.content[0].text))
-  for (const context of contexts) {
-    assert.equal(context.digest, 'multi-module-digest')
-    assert.equal(new Set(context.notes.map(note => note.groupId)).size, 1)
-  }
-  assert.deepEqual(contexts.map(context => context.notes.map(note => note.text)).flat().sort(),
-    [firstNote.text, secondNote.text, followUp.text].sort())
-  // Repeated submissions reuse both receipts instead of spawning new sessions.
-  const repeated = await submitModules([followUp, secondNote, firstNote], { [first.id]: 'focused' }, presets)
-  assert.deepEqual(repeated, result)
-  assert.equal(creates.length, 2)
-  assert.equal(prompts.length, 2)
-})
-
-test('module submission failures stay isolated and a retry resumes the pending module', async () => {
-  const graph = structuredClone(multiGraph)
-  const [first, second] = graph.groups
-  const [good, bad] = moduleNotes(first, second)
-  const { submitModules, files, prompts, workspace, rejectWhen, acceptAll } =
-    fixture({ graph, digest: 'partial-digest' })
-  rejectWhen('模块 ' + second.title + ' 的批注')
-  const partial = await submitModules([good, bad], {})
-  assert.equal(partial.submissions.length, 1)
-  assert.equal(partial.submissions[0].module, first.id)
-  assert.deepEqual(partial.failures, [{ module: second.id, groupTitle: second.title,
-    message: 'DSH 暂未接收任务。批注已保存，可重新提交。' }])
-  const badDigest = selectionDigest([bad.id])
-  assert.equal(files.has('.threadlight/submissions/' + badDigest + '.json'), false)
-  const pending = JSON.parse(files.get('.threadlight/submissions/' + badDigest + '.pending.json'))
-  assert.equal(pending.module, second.id)
-  assert.ok(workspace.sessionIds.includes(pending.sessionId))
-  acceptAll()
-  const retried = await submitModules([good, bad], {})
-  assert.deepEqual(retried.failures, [])
-  assert.equal(retried.submissions.length, 2)
-  const resumed = retried.submissions.find(entry => entry.module === second.id)
-  assert.equal(resumed.sessionId, pending.sessionId)
-  assert.equal(resumed.digest, badDigest)
-  const badPrompts = prompts.filter(args => args.content[0].text.includes('模块 ' + second.title + ' 的批注'))
-  assert.equal(badPrompts.length, 2)
-  assert.equal(badPrompts[1].requestId, pending.requestId)
-  assert.equal(JSON.parse(files.get('.threadlight/submissions/' + badDigest + '.json')).module, second.id)
-})
-
-test('module submissions report every failed module without throwing', async () => {
-  const graph = structuredClone(multiGraph)
-  const [first, second] = graph.groups
-  const notes = moduleNotes(first, second)
-  const { submitModules, rejectWhen } = fixture({ graph, digest: 'all-failed-digest' })
-  rejectWhen('的批注')
-  const result = await submitModules(notes, {})
-  assert.deepEqual(result, { submissions: [], failures: [
-    { module: first.id, groupTitle: first.title, message: 'DSH 暂未接收任务。批注已保存，可重新提交。' },
-    { module: second.id, groupTitle: second.title, message: 'DSH 暂未接收任务。批注已保存，可重新提交。' },
-  ] })
-})
-
-test('module submissions validate plan keys, preset availability and the module limit', async () => {
-  const graph = structuredClone(multiGraph)
-  const groups = graph.groups.slice(0, 9)
-  const notes = moduleNotes(...groups)
-  const { submitModules, creates } = fixture({ graph, digest: 'validation-digest' })
+test('preset and target validation happens before a session is created', async () => {
+  const { submit, creates } = fixture()
   const presets = [{ id: 'standard', isDefault: true }, { id: 'broken-preset', broken: '插件加载失败' }]
-  await assert.rejects(submitModules([notes[0]], { 'missing-module': 'standard' }, presets), { status: 400 })
-  await assert.rejects(submitModules([notes[0]], { [groups[0].id]: 42 }, presets), { status: 400 })
-  await assert.rejects(submitModules([notes[0]], { [groups[0].id]: 'missing-preset' }, presets), { status: 400 })
-  await assert.rejects(submitModules([notes[0]], { [groups[0].id]: 'broken-preset' }, presets), { status: 503 })
-  await assert.rejects(submitModules([notes[0]], { [groups[0].id]: 'standard' }), { status: 503 })
-  await assert.rejects(submitModules([notes[0]], { [groups[0].id]: 'standard' }, []), { status: 400 })
-  await assert.rejects(submitModules(notes, {}), { status: 400 })
-  await assert.rejects(submitModules([{ module: 'missing-group', id: randomUUID(), text: '无目标。',
-    createdAt: '2026-11-22T05:00:00.000Z' }], {}), { status: 400 })
+  await assert.rejects(submit([notes[0]], { presets, agentPreset: 'missing-preset' }), { status: 400 })
+  await assert.rejects(submit([notes[0]], { presets, agentPreset: 'broken-preset' }), { status: 503 })
+  await assert.rejects(submit([notes[0]], { agentPreset: 'standard' }), { status: 503 })
+  await assert.rejects(submit([notes[0]], { presets, agentPreset: 42 }), { status: 400 })
+  await assert.rejects(submit([{ module: 'missing-group', id: randomUUID(), text: '无目标。',
+    createdAt: '2026-11-22T05:00:00.000Z' }]), { status: 400 })
   assert.equal(creates.length, 0)
 })

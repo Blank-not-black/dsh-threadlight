@@ -55,7 +55,7 @@ node bin/dsh-threadlight.mjs export  <graph.json> <out-dir>      # Obsidian 笔�
 - 工具 `threadlight_annotate`：把用户反馈写进当前工作区的批注箱；只允许写批注，不会改图谱。
 - 工具 `threadlight_export`：把当前工作区 `.threadlight/graph.json` 导出到 Obsidian。
 
-用户在 Threadlight 页面提交批注时，DSH 会按模块分别建立会话（每个模块可指定 agent preset），线程并行处理；回复里按批注编号报告改动位置和实际验证结果。
+用户在 Threadlight 页面提交批注时，所有选中的批注会进入**一个主会话**。提示词会要求主会话按模块用 `subagent` 工具派出子代理：每个子代理只处理自己模块的批注、先读源码再修改并运行验证，主会话负责控制并行数量、避免子代理互相覆盖，最后逐模块复核并汇总改动与验证结果。同一组批注重复提交复用原会话；回执在 `.threadlight/submissions/` 下记录涉及模块和主会话 session。
 
 ## 契约与文档
 

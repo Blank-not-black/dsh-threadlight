@@ -25,6 +25,8 @@ input { margin: 0; }
 .note-text, blockquote { white-space: pre-wrap; }
 blockquote { margin: 8px 0; padding: 8px 12px; color: var(--quiet); background: var(--paper); border-left: 3px solid var(--accent); }
 .note-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--quiet); font-size: .85rem; }
+.note-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.note-body textarea { display: block; width: 100%; min-height: 6rem; margin: 6px 0; }
 .submitted { color: var(--accent); }
 footer { border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; }
 #status { flex: 1 1 20rem; }
@@ -35,10 +37,9 @@ footer { border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; alig
 .empty-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
 body.is-empty footer { display: none; }
 .submit-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.failures { flex: 1 1 100%; color: var(--error); font-size: .88rem; }
-.failures p { margin-bottom: 2px; }
-.failures ul { margin: 0; padding-left: 1.3em; }
+.submit-actions .preset-picker select { max-width: 12rem; }
 @media (max-width: 40rem) {
   .group-heading { align-items: flex-start; }
   .group-tools { justify-content: flex-start; }
+  .submit-actions { margin-left: 0; }
 }
