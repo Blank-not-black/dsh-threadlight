@@ -3,3 +3,4 @@ analyzer/target/
 dist/
 .threadlight/
 *.tgz
+release-notes.md

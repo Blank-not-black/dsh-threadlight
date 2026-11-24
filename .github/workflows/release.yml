@@ -1,0 +1,82 @@
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    name: publish npm and GitHub release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - name: Require a release tag
+        run: |
+          if [[ "$GITHUB_REF" != refs/tags/v* ]]; then
+            echo "Run this workflow on the release tag, for example: gh workflow run release.yml --ref v0.1.0"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Verify tag, version and changelog
+        id: release
+        run: |
+          set -euo pipefail
+          node scripts/release-check.mjs "$RELEASE_TAG"
+          version="${RELEASE_TAG#v}"
+          if [[ "${version%%+*}" == *-* ]]; then
+            echo "npm-tag=dev" >> "$GITHUB_OUTPUT"
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "npm-tag=latest" >> "$GITHUB_OUTPUT"
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "tarball=./dist/dsh-threadlight-$version.tgz" >> "$GITHUB_OUTPUT"
+      - run: npm ci
+      - run: npm run check
+      - run: mkdir -p dist
+      - run: npm pack --pack-destination dist
+      - name: Publish to npm
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          DIST_TAG: ${{ steps.release.outputs.npm-tag }}
+          TARBALL: ${{ steps.release.outputs.tarball }}
+        run: |
+          set -euo pipefail
+          args=("$TARBALL" --registry=https://registry.npmjs.org --provenance --tag "$DIST_TAG")
+          if [ -n "${NPM_TOKEN:-}" ]; then
+            npmrc="$RUNNER_TEMP/threadlight-release.npmrc"
+            printf '%s\n' '//registry.npmjs.org/:_authToken=${NPM_TOKEN}' > "$npmrc"
+            args+=(--userconfig "$npmrc")
+          fi
+          npm publish "${args[@]}"
+      - name: Create or update the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ steps.release.outputs.prerelease }}
+          TARBALL: ${{ steps.release.outputs.tarball }}
+        run: |
+          set -euo pipefail
+          release_flags=(--latest)
+          if [[ "$PRERELEASE" == true ]]; then
+            release_flags=(--prerelease --latest=false)
+          fi
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$TARBALL" --clobber
+            gh release edit "$RELEASE_TAG" --notes-file release-notes.md "${release_flags[@]}"
+          else
+            gh release create "$RELEASE_TAG" "$TARBALL" --title "$RELEASE_TAG" --notes-file release-notes.md \
+              --verify-tag "${release_flags[@]}"
+          fi

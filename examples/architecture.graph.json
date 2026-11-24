@@ -11,12 +11,12 @@
       {
         "id": "publishing",
         "title": "查看、发布与分发",
-        "summary": "浏览操作与证据，管理发布版本，在 DSH 或本地打开文档。"
+        "summary": "浏览操作与证据，在 DSH 对话或面板中打开图谱，管理发布版本与文档。"
       },
       {
         "id": "review",
         "title": "批注与审阅任务",
-        "summary": "记录对图谱的反馈，从批注箱或批注对话框交给 DSH。"
+        "summary": "记录对图谱的反馈，可由查看器、agent 或对话写入，再从批注箱或批注对话框交给 DSH，处理完成后验收归档。"
       },
       {
         "id": "implementation",
@@ -49,6 +49,22 @@
     {
       "term": "基线",
       "definition": "从图谱复制草稿时记录的原线路、图谱摘要与证据，用于对照改动和定位回流目标。"
+    },
+    {
+      "term": "状态胶囊",
+      "definition": "会话输入框下方的一行项目状态，显示当前项目的模块数和待提交批注数。"
+    },
+    {
+      "term": "agent preset",
+      "definition": "DSH 中预定义的 agent 配置，决定会话使用的模型、指令和工具；Threadlight 允许为一次批注提交选择主会话使用的 preset。"
+    },
+    {
+      "term": "主会话",
+      "definition": "DSH 中承接一次批注提交的会话。Threadlight 让主会话按模块派出子代理，再逐模块复核并汇总结果。"
+    },
+    {
+      "term": "验收归档",
+      "definition": "确认批注对应的改动符合预期后结束这条批注；归档的批注离开待处理列表，之后仍可恢复。"
     }
   ],
   "groups": [
@@ -182,20 +198,33 @@
         },
         {
           "id": "web-graph-task",
-          "title": "在 DSH Web 发起图谱任务",
-          "summary": "登记工作区时可生成图谱，工作区列表也可发起更新或重新生成。",
+          "title": "从工作区或图谱页发起图谱任务",
+          "summary": "登记工作区时可生成图谱，工作区列表和图谱页顶栏也可发起更新或重新生成。",
           "nodes": [
             {
               "id": "choose",
               "title": "选择图谱任务",
-              "summary": "创建工作区时可勾选生成图谱。在支持这些操作的列表项上可以更新或重新生成。",
+              "summary": "创建工作区时可勾选生成图谱；工作区列表可更新或重新生成，图谱页顶栏也提供这两个入口。",
               "details": [
-                "工作区创建可附带 generate。列表向 graph-session 发送 update 或 regenerate。重新生成有确认提示，取消会留在列表。"
+                "工作区创建可附带 generate。列表和图谱页都向 graph-session 发送 update 或 regenerate。重新生成要先确认归档，取消会留在原页面。"
               ],
               "sources": [
                 { "path": "lib/dsh-launch.mjs", "kind": "source" },
                 { "path": "lib/dsh-launch.js", "kind": "source" },
+                { "path": "lib/dsh-review.js", "kind": "source" },
                 { "path": "lib/dsh-review.mjs", "kind": "source" }
+              ]
+            },
+            {
+              "id": "viewer",
+              "title": "在图谱页顶栏发起任务",
+              "summary": "图谱页顶栏的「刷新图谱」和「重新生成」直接派发任务，不必回到工作区列表。",
+              "details": [
+                "按钮先变成「正在创建任务」或「正在归档」，成功后显示「已排队」和会话前 8 位，约 5 秒后恢复；失败时显示原因，约 6 秒后恢复。「重新生成」的确认框说明旧版本会归档到 .threadlight/archive/。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-review.js", "kind": "source", "line": 253 },
+                { "path": "lib/reader.html", "kind": "source" }
               ]
             },
             {
@@ -203,7 +232,7 @@
               "title": "准备生成或修订",
               "summary": "重新生成会先归档当前发布，再开始新的梳理。",
               "details": [
-                "generate 和 regenerate 要求会话按技能全量整理。update 要求读取现有 .threadlight/graph.json 和 Git 改动，保留稳定 ID 后增量修订。regenerate 在派发前调用重置，锁冲突和权限错误会提示。"
+                "generate 和 regenerate 要求会话按技能全量整理。update 要求读取现有 .threadlight/graph.json 和 Git 改动，保留稳定 ID 后增量修订。regenerate 在派发前调用重置，锁冲突和权限错误会提示。从图谱页发起的重新生成同样先归档再派发。"
               ],
               "sources": [
                 { "path": "lib/dsh-review.mjs", "kind": "source" },
@@ -214,9 +243,9 @@
             {
               "id": "queue",
               "title": "打开 DSH 会话查看结果",
-              "summary": "任务接收后可在相应工作区的会话中查看进度，完成后回列表打开可用图谱。",
+              "summary": "任务接收后可在相应工作区的会话中查看进度，完成后回列表或重新加载图谱页读到新图谱。",
               "details": [
-                "普通工作区会话收到提示词，要求写 .threadlight/graph.json 并运行 validate。审阅页有发布状态时优先读取该状态指向的 revision，无状态时才读工作区图谱文件。"
+                "普通工作区会话收到提示词，要求写 .threadlight/graph.json 并运行 validate。审阅页有发布状态时优先读取该状态指向的 revision，无状态时才读工作区图谱文件。从图谱页派发后页面保持当前视图。"
               ],
               "sources": [
                 { "path": "lib/dsh-review.mjs", "kind": "source" },
@@ -227,25 +256,28 @@
             {
               "id": "task-error",
               "title": "查看任务创建结果",
-              "summary": "列表会提示派发失败，可稍后重试。创建时若未拿到会话，仍会进入已登记的工作区。",
+              "summary": "列表或顶栏按钮会提示派发失败，可稍后重试。创建时若未拿到会话，仍会进入已登记的工作区。",
               "details": [
-                "graph-session 对服务缺失或队列拒收分别报告 503 或 502。创建入口可只返回工作区 ID。重新生成的归档先于任务派发，后续派发失败时归档仍已发生。"
+                "graph-session 对服务缺失或队列拒收分别报告 503 或 502。创建入口可只返回工作区 ID。重新生成的归档先于任务派发，后续派发失败时归档仍已发生；顶栏按钮会显示失败原因并自动恢复。"
               ],
               "sources": [
                 { "path": "lib/dsh-review.mjs", "kind": "source" },
-                { "path": "lib/dsh-launch.js", "kind": "source" }
+                { "path": "lib/dsh-launch.js", "kind": "source" },
+                { "path": "lib/dsh-review.js", "kind": "source" }
               ]
             }
           ],
           "edges": [
-            { "from": "choose", "to": "prepare", "kind": "sequence" },
+            { "from": "choose", "to": "prepare", "kind": "branch", "label": "从工作区列表或启动页发起" },
+            { "from": "viewer", "to": "prepare", "kind": "branch", "label": "从图谱页顶栏发起" },
             { "from": "prepare", "to": "queue", "kind": "branch", "label": "DSH 接收任务" },
             { "from": "prepare", "to": "task-error", "kind": "branch", "label": "归档或派发未成功" },
-            { "from": "task-error", "to": "choose", "kind": "branch", "label": "返回任务入口后重试" }
+            { "from": "task-error", "to": "choose", "kind": "branch", "label": "返回任务入口后重试" },
+            { "from": "task-error", "to": "viewer", "kind": "branch", "label": "按钮恢复后在图谱页重试" }
           ],
           "layout": {
             "rows": [
-              ["choose"],
+              ["choose", "viewer"],
               ["prepare"],
               ["queue", "task-error"]
             ]
@@ -403,7 +435,7 @@
       "id": "delivery",
       "area": "publishing",
       "title": "查看与文档导出",
-      "summary": "通过功能总览、操作流程和功能关系浏览图谱，或分发相互链接的文档和画布。",
+      "summary": "在查看器浏览图谱、让 agent 按结构读取，或分发相互链接的文档和画布。",
       "flows": [
         {
           "id": "read",
@@ -473,7 +505,7 @@
               "title": "查看术语与选文讲解",
               "summary": "开启新手模式可读术语解释。DSH Web 中选中正文还可询问含义或进一步讲解。",
               "details": [
-                "优先采用项目术语定义。选文讲解校验正文归属，使用当前 DSH 默认模型和图谱上下文，以纯文本返回，无工具调用。模型失败或超时会显示重试提示。"
+                "优先采用项目术语定义。选文讲解校验正文归属，使用当前 DSH 默认模型和图谱上下文，以纯文本返回，无工具调用。模型失败或超时会显示重试提示。术语提示在在线页面用打包的定位脚本避让视口边缘，离线查看器使用本地计算。"
               ],
               "sources": [
                 { "path": "lib/reader.html", "kind": "source" },
@@ -591,6 +623,88 @@
             { "group": "graph", "flow": "validate", "kind": "uses" },
             { "group": "evidence", "flow": "anchor", "kind": "uses" }
           ]
+        },
+        {
+          "id": "agent-read",
+          "title": "让 agent 读取图谱",
+          "summary": "在会话里让 agent 按概览、线路、步骤或关键词读取当前项目图谱，结果只含结构、状态和源码位置。",
+          "nodes": [
+            {
+              "id": "invoke",
+              "title": "调用 threadlight_graph",
+              "summary": "agent 用 view、group、flow、step 或 term 读取当前工作区的图谱。",
+              "details": [
+                "参数只接受这五个字段：overview 不能带其他参数，flow 需要 group 和 flow，step 再加 step，search 需要 term。工具要求活动 DSH 会话，读取失败会说明原因。"
+              ],
+              "sources": [
+                { "path": "index.mjs", "kind": "source", "line": 341 },
+                { "path": "lib/graph-query.mjs", "kind": "source", "line": 50 },
+                { "path": "tests/dsh-tools.test.mjs", "kind": "test", "line": 74 }
+              ]
+            },
+            {
+              "id": "overview",
+              "title": "读取领域、功能区和线路清单",
+              "summary": "概览返回领域、功能区和线路的数量与清单，超过 200 条时截断。",
+              "details": [
+                "结果包含领域、功能区、线路和步骤的计数，带功能区数的领域，带所属领域的功能区，以及每条线路的步骤数。truncated 表示清单被截断。"
+              ],
+              "sources": [
+                { "path": "lib/graph-query.mjs", "kind": "source", "line": 134 },
+                { "path": "tests/dsh-tools.test.mjs", "kind": "test", "line": 74 }
+              ]
+            },
+            {
+              "id": "detail",
+              "title": "读取一条线路或一个步骤",
+              "summary": "线路视图列出步骤、派生状态和连线；步骤视图补上详情、验证摘要和源码位置。",
+              "details": [
+                "步骤状态由显式 state、来源和验证记录派生。源码只给路径、种类、行号和可选符号，不含片段预览；连线保留条件、类型和标签。"
+              ],
+              "sources": [
+                { "path": "lib/graph-query.mjs", "kind": "source", "line": 166 },
+                { "path": "tests/dsh-tools.test.mjs", "kind": "test", "line": 95 },
+                { "path": "tests/dsh-tools.test.mjs", "kind": "test", "line": 112 }
+              ]
+            },
+            {
+              "id": "search",
+              "title": "按关键词搜索",
+              "summary": "搜索不区分大小写地匹配线路与步骤的标题和摘要，最多返回 200 条。",
+              "details": [
+                "结果分为命中的线路和步骤，没有匹配时返回空列表；任一列表超限时 truncated 为 true。"
+              ],
+              "sources": [
+                { "path": "lib/graph-query.mjs", "kind": "source", "line": 215 },
+                { "path": "tests/dsh-tools.test.mjs", "kind": "test", "line": 139 }
+              ]
+            },
+            {
+              "id": "read-error",
+              "title": "处理不存在或无效的查询",
+              "summary": "找不到功能区、线路或步骤时，错误列出可选项；参数组合不对时指出具体要求。",
+              "details": [
+                "未知参数、缺参数或参数组合冲突逐字段说明，便于 agent 修正后重查。发布状态破损或图谱无法解析时提示刷新图谱。"
+              ],
+              "sources": [
+                { "path": "lib/graph-query.mjs", "kind": "source", "line": 84 },
+                { "path": "tests/dsh-tools.test.mjs", "kind": "test", "line": 156 },
+                { "path": "index.mjs", "kind": "source", "line": 23 }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "invoke", "to": "overview", "kind": "branch", "label": "view 为 overview 或省略" },
+            { "from": "invoke", "to": "detail", "kind": "branch", "label": "view 为 flow 或 step" },
+            { "from": "invoke", "to": "search", "kind": "branch", "label": "view 为 search" },
+            { "from": "invoke", "to": "read-error", "kind": "branch", "label": "参数组合或目标无效" }
+          ],
+          "layout": {
+            "rows": [
+              ["invoke"],
+              ["overview", "detail", "search", "read-error"]
+            ]
+          }
         }
       ]
     },
@@ -733,19 +847,20 @@
         {
           "id": "enter",
           "title": "从 DSH 进入工作区",
-          "summary": "从 Threadlight 面板选择项目，或用会话顶栏定位当前项目及批注箱。",
+          "summary": "从 Threadlight 面板选择项目，或用会话顶栏定位当前项目并进入功能总览。",
           "nodes": [
             {
               "id": "panel",
               "title": "打开侧栏或会话顶栏",
-              "summary": "DSH 侧栏可打开 Threadlight，当前会话顶栏的 Threadlight 按钮可进入该项目的批注箱。",
+              "summary": "DSH 侧栏和当前会话顶栏的 Threadlight 按钮都打开该项目的功能总览。",
               "details": [
-                "客户端记录最近的会话标识，宿主按会话归属解析工作区。也可直接进入 /threadlight/。顶栏入口依赖宿主提供对应插槽。"
+                "客户端记录最近的会话标识，宿主按会话归属解析工作区。侧栏和顶栏都从功能总览进入；批注箱仍可从图谱顶栏、批注卡片或有待处理批注时的状态胶囊进入。也可直接进入 /threadlight/。顶栏入口依赖宿主提供对应插槽。"
               ],
               "sources": [
                 { "path": "lib/dsh-client.js", "kind": "source" },
                 { "path": "lib/dsh-review.mjs", "kind": "source" },
-                { "path": "index.mjs", "kind": "source" }
+                { "path": "index.mjs", "kind": "source" },
+                { "path": "tests/dsh-client.test.mjs", "kind": "test" }
               ]
             },
             {
@@ -779,7 +894,7 @@
               "title": "进入图谱或草稿",
               "summary": "已有可读图谱的工作区进入图谱，尚无图谱的可用工作区打开草稿。",
               "details": [
-                "审阅路由优先读取发布 revision，无发布状态时尝试读取工作区图谱。会话顶栏请求批注箱但项目没有图谱时会提示。不可用的工作区会回到列表。可从图谱或草稿切换工作区。"
+                "审阅路由优先读取发布 revision，无发布状态时尝试读取工作区图谱。会话顶栏解析到项目后打开功能总览；项目没有图谱时打开草稿。不可用的工作区会回到列表。可从图谱或草稿切换工作区。"
               ],
               "sources": [
                 { "path": "lib/dsh-review.mjs", "kind": "source" },
@@ -803,10 +918,174 @@
       ]
     },
     {
+      "id": "conversation",
+      "area": "publishing",
+      "title": "对话中的 Threadlight",
+      "summary": "在 DSH 会话里看到 Threadlight 工具卡片，以及输入框下方的项目状态。",
+      "flows": [
+        {
+          "id": "cards",
+          "title": "在对话里查看 Threadlight 工具卡片",
+          "summary": "agent 调用 Threadlight 工具时，会话在工具位置显示带图标和状态的结构化卡片。",
+          "nodes": [
+            {
+              "id": "call",
+              "title": "agent 调用 Threadlight 工具",
+              "summary": "threadlight_graph、threadlight_annotate 或 threadlight_export 被调用时，聊天记录出现 Threadlight 卡片。",
+              "details": [
+                "卡片经宿主的 tool.call.toolview 键控插槽按工具名注册，只替换这三个工具；其他工具仍是通用行。注册失败时卡片不出现，调用本身不受影响。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-client.js", "kind": "source", "line": 381 },
+                { "path": "tests/dsh-client.test.mjs", "kind": "test", "line": 172 }
+              ]
+            },
+            {
+              "id": "running",
+              "title": "查看运行状态与摘要",
+              "summary": "运行中图标脉动并显示摘要，完成、失败或停止时改用对应颜色和文字。",
+              "details": [
+                "摘要按工具生成：批注显示正文前 52 字，图谱按视图显示概览、线路、步骤或搜索词，导出显示「已导出到 Obsidian」。失败摘要取结果首行，中断显示「已停止」。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-client.js", "kind": "source", "line": 177 },
+                { "path": "tests/dsh-client.test.mjs", "kind": "test", "line": 241 }
+              ]
+            },
+            {
+              "id": "expand",
+              "title": "展开完整输出",
+              "summary": "有结果时点击卡片展开完整输出，再点收起。",
+              "details": [
+                "展开区是等宽滚动区，最高 280px；运行中还没有结果时不展开，卡片保持单行。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-client.js", "kind": "source", "line": 222 },
+                { "path": "tests/dsh-client.test.mjs", "kind": "test", "line": 206 }
+              ]
+            },
+            {
+              "id": "open",
+              "title": "从卡片打开图谱或批注箱",
+              "summary": "展开后点按钮可打开当前项目的图谱；批注卡片打开批注箱。",
+              "details": [
+                "按钮用插槽注入的会话标识定位项目并选中 Threadlight 面板；没有注入时退回最近记住的会话。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-client.js", "kind": "source", "line": 209 },
+                { "path": "tests/dsh-client.test.mjs", "kind": "test", "line": 189 }
+              ]
+            },
+            {
+              "id": "fallback",
+              "title": "没有插槽时保留通用行",
+              "summary": "宿主不提供卡片插槽时，工具结果仍以通用行显示，调用和结果都不受影响。",
+              "details": [
+                "插槽、布局或面板服务不可用时只是缺少卡片，不会阻止工具执行。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-client.js", "kind": "source", "line": 381 }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "call", "to": "running", "kind": "branch", "label": "宿主提供 tool.call.toolview 插槽" },
+            { "from": "call", "to": "fallback", "kind": "branch", "label": "宿主没有该插槽" },
+            { "from": "running", "to": "expand", "kind": "branch", "label": "结果可显示" },
+            { "from": "expand", "to": "open", "kind": "sequence" }
+          ],
+          "layout": {
+            "rows": [
+              ["call"],
+              ["running", "fallback"],
+              ["expand"],
+              ["open"]
+            ]
+          },
+          "links": [
+            { "group": "delivery", "flow": "read", "kind": "continues" }
+          ]
+        },
+        {
+          "id": "dock",
+          "title": "输入框下方的项目状态",
+          "summary": "会话输入框下方显示当前项目的模块数和待处理批注数，点一下打开对应视图。",
+          "nodes": [
+            {
+              "id": "summary",
+              "title": "读取当前会话的项目摘要",
+              "summary": "胶囊出现前，先按会话查询所属项目的图谱规模和批注数。",
+              "details": [
+                "GET threadlight/api/summary?session= 解析会话所属工作区，返回项目名、领域、模块、线路和步骤数，以及批注总数、待处理数、已提交数和已归档数；验收归档的批注不再计入待处理。相同会话的摘要缓存 5 秒。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-client.js", "kind": "source", "line": 283 },
+                { "path": "lib/dsh-review.mjs", "kind": "source", "line": 404 },
+                { "path": "lib/dsh-review.mjs", "kind": "source", "line": 435 },
+                { "path": "tests/dsh-host.test.mjs", "kind": "test", "line": 405 }
+              ]
+            },
+            {
+              "id": "pill",
+              "title": "显示模块数与待处理批注",
+              "summary": "有图谱时显示「Threadlight · 项目名 · N 模块」；有待处理批注时改显「N 条批注待处理」。",
+              "details": [
+                "面板打开期间每 20 秒和窗口重新聚焦时刷新。没有图谱的工作区不渲染状态胶囊。只有未验收归档的批注计入待处理，全部验收后回到模块数。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-client.js", "kind": "source", "line": 321 },
+                { "path": "lib/dsh-client.js", "kind": "source", "line": 330 },
+                { "path": "tests/dsh-client.test.mjs", "kind": "test", "line": 284 }
+              ]
+            },
+            {
+              "id": "open",
+              "title": "点击进入图谱或批注箱",
+              "summary": "有待处理批注时打开批注箱，否则打开图谱，并记住当前会话。",
+              "details": [
+                "点击把面板指向该会话所属项目；批注数归零后同一位置改为打开图谱。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-client.js", "kind": "source", "line": 337 }
+              ]
+            },
+            {
+              "id": "hidden",
+              "title": "没有图谱时不显示",
+              "summary": "项目还没有 Threadlight 图谱时，输入框下方不出现这行状态。",
+              "details": [
+                "摘要返回空图谱或请求失败时保持隐藏，不占用输入区空间，也不提示错误。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-client.js", "kind": "source", "line": 326 },
+                { "path": "lib/dsh-review.mjs", "kind": "source", "line": 425 }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "summary", "to": "pill", "kind": "branch", "label": "项目有可读图谱" },
+            { "from": "summary", "to": "hidden", "kind": "branch", "label": "没有图谱或摘要读取失败" },
+            { "from": "pill", "to": "open", "kind": "sequence" }
+          ],
+          "layout": {
+            "rows": [
+              ["summary"],
+              ["pill", "hidden"],
+              ["open"]
+            ]
+          },
+          "links": [
+            { "group": "delivery", "flow": "read", "kind": "continues" },
+            { "group": "annotation-tasks", "flow": "submit", "kind": "continues" }
+          ]
+        }
+      ]
+    },
+    {
       "id": "annotations",
       "area": "review",
       "title": "图谱批注",
-      "summary": "在 DSH 查看器给功能区、线路、步骤和选中文段添加可追溯的反馈。",
+      "summary": "在 DSH 查看器或由 agent 给功能区、线路、步骤和选中文段添加可追溯的反馈，处理完成后验收归档。",
       "flows": [
         {
           "id": "edit",
@@ -818,11 +1097,13 @@
               "title": "打开模块、线路或步骤的批注",
               "summary": "在功能区标题、线路标题、步骤卡片或步骤详情标题右键，可打开对应批注。",
               "details": [
-                "审阅菜单解析当前功能区及线路、步骤 ID，对话框仅显示该目标的批注。功能区还可用模块批注按钮进入。"
+                "审阅菜单解析当前功能区及线路、步骤 ID，对话框仅显示该目标的批注。功能区还可用模块批注按钮进入。",
+                "审阅页加载打包的定位脚本后，右键菜单在视口边缘翻转、避让并跟随滚动；离线查看器继续用本地计算。"
               ],
               "sources": [
                 { "path": "lib/dsh-review.js", "kind": "source" },
                 { "path": "lib/reader.html", "kind": "source" },
+                { "path": "src/dsh-floating.js", "kind": "source" },
                 { "path": "tests/reader.test.mjs", "kind": "test" }
               ]
             },
@@ -855,14 +1136,15 @@
             {
               "id": "revise",
               "title": "修改或删除已有批注",
-              "summary": "可修改批注正文或删除该条批注。修改保留原引用和归属。",
+              "summary": "可在批注对话框或批注箱修改正文、删除批注。修改保留原引用和归属。",
               "details": [
-                "PATCH 更新正文及修改时间。DELETE 在检查写权限及路径后删除记录。两种操作按批注串行，避免编辑恢复已删除的批注。"
+                "PATCH 更新正文及修改时间。DELETE 在检查写权限及路径后删除记录。两种操作按批注串行，避免编辑恢复已删除的批注。",
+                "批注箱对每条批注提供相同的修改和删除入口，写操作期间暂停其它批注操作，成功后就地更新正文、时间和批注数。"
               ],
               "sources": [
                 { "path": "lib/dsh-review.mjs", "kind": "source" },
-                { "path": "lib/dsh-review.js", "kind": "source" },
-                { "path": "tests/reader.test.mjs", "kind": "test" }
+                { "path": "lib/dsh-notes.js", "kind": "source", "line": 291 },
+                { "path": "tests/reader.test.mjs", "kind": "test", "line": 729 }
               ]
             },
             {
@@ -898,6 +1180,189 @@
           "links": [
             { "group": "annotation-tasks", "flow": "submit", "kind": "continues" }
           ]
+        },
+        {
+          "id": "agent-note",
+          "title": "让 agent 记录批注",
+          "summary": "agent 把对话里的反馈写成 Threadlight 批注，保存后出现在对应模块的批注箱。",
+          "nodes": [
+            {
+              "id": "target",
+              "title": "指定模块与批注目标",
+              "summary": "agent 给出模块 id，可把批注限定到线路或步骤，也可附上用户选中的原文。",
+              "details": [
+                "target.kind 取 group、flow 或 step；flow 要属于该模块，step 要属于该线路。找不到时错误信息列出可选项。"
+              ],
+              "sources": [
+                { "path": "lib/tool-annotations.mjs", "kind": "source", "line": 58 },
+                { "path": "index.mjs", "kind": "source", "line": 361 }
+              ]
+            },
+            {
+              "id": "build",
+              "title": "生成批注记录",
+              "summary": "正文 1 到 3000 字，引用最长 3000 字，记录写入当前图谱摘要和创建时间。",
+              "details": [
+                "记录字段与查看器一致：id、text、createdAt、module、graph、target，以及可选 quote。图谱摘要不是 64 位十六进制时拒绝写入。"
+              ],
+              "sources": [
+                { "path": "lib/tool-annotations.mjs", "kind": "source", "line": 96 },
+                { "path": "tests/dsh-tools.test.mjs", "kind": "test", "line": 179 }
+              ]
+            },
+            {
+              "id": "write",
+              "title": "原子写入批注文件",
+              "summary": "批注写到 .threadlight/annotations/<模块>/<id>.json，ID 冲突时换一个重试一次。",
+              "details": [
+                "经 DSH 文件服务创建，遵守工作区权限；权限不足时提示当前 DSH 权限不允许写入。成功返回批注 ID、模块、目标和创建时间。"
+              ],
+              "sources": [
+                { "path": "lib/tool-annotations.mjs", "kind": "source", "line": 123 },
+                { "path": "index.mjs", "kind": "source", "line": 384 },
+                { "path": "tests/dsh-tools.test.mjs", "kind": "test", "line": 222 }
+              ]
+            },
+            {
+              "id": "inbox",
+              "title": "在批注箱看到新批注",
+              "summary": "保存成功后，批注出现在该模块的批注箱，可继续修改或和其他批注一起提交给 DSH。",
+              "details": [
+                "批注箱按模块汇总，不区分来自查看器还是 agent 工具；写入不改变图谱发布，也不触发重新生成。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-notes.js", "kind": "source" },
+                { "path": "lib/dsh-review.mjs", "kind": "source" },
+                { "path": "tests/reader.test.mjs", "kind": "test", "line": 639 }
+              ]
+            },
+            {
+              "id": "note-error",
+              "title": "处理无效输入或保存失败",
+              "summary": "缺少模块、目标不存在、正文为空或过长时返回明确错误，不写文件。",
+              "details": [
+                "参数校验先于写入；批注 ID、创建时间或摘要格式错误也会被拒绝。保存冲突重试一次后仍失败时提示重试。"
+              ],
+              "sources": [
+                { "path": "tests/dsh-tools.test.mjs", "kind": "test", "line": 202 },
+                { "path": "lib/tool-annotations.mjs", "kind": "source", "line": 123 }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "target", "to": "build", "kind": "sequence" },
+            { "from": "build", "to": "write", "kind": "branch", "label": "输入与图谱摘要都有效" },
+            { "from": "build", "to": "note-error", "kind": "branch", "label": "参数或目标无效" },
+            { "from": "write", "to": "inbox", "kind": "branch", "label": "文件创建成功" },
+            { "from": "write", "to": "note-error", "kind": "branch", "label": "保存冲突或权限不足" }
+          ],
+          "layout": {
+            "rows": [
+              ["target"],
+              ["build"],
+              ["write"],
+              ["inbox", "note-error"]
+            ]
+          },
+          "links": [
+            { "group": "annotation-tasks", "flow": "submit", "kind": "continues" }
+          ]
+        },
+        {
+          "id": "accept",
+          "title": "验收并归档批注",
+          "summary": "确认批注对应的改动符合预期后逐条或批量验收，归档的批注默认隐藏，也可以恢复为待处理。",
+          "nodes": [
+            {
+              "id": "review",
+              "title": "在批注箱查看待处理批注",
+              "summary": "标题显示待处理与已归档数量；已提交的批注标出接收会话和验收入口。",
+              "details": [
+                "只把未归档的批注算作待处理。已提交但未验收的批注显示「已提交 · 会话 xxxx」和「验收」按钮；未提交的批注仍可勾选提交。",
+                "每条批注在批注箱也能修改正文或删除。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-notes.js", "kind": "source", "line": 221 },
+                { "path": "lib/dsh-notes.html", "kind": "source", "line": 18 },
+                { "path": "lib/dsh-review.mjs", "kind": "source", "line": 435 },
+                { "path": "tests/reader.test.mjs", "kind": "test", "line": 812 }
+              ]
+            },
+            {
+              "id": "accept",
+              "title": "逐条验收归档",
+              "summary": "点「验收」并确认后，批注写入验收时间，行变暗并从待处理列表移除。",
+              "details": [
+                "PATCH 带 resolved: true，服务端写入 ISO-8601 的 resolvedAt 和 resolvedBy: 'user'。验收后该行默认隐藏（正在显示已归档时保留为变暗的行），标题中的待处理数减一、已归档数加一。",
+                "只有已提交的批注显示验收按钮；未提交的批注需要先提交，或直接删除。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-notes.js", "kind": "source", "line": 359 },
+                { "path": "lib/dsh-review.mjs", "kind": "source", "line": 495 },
+                { "path": "docs/graph-format.md", "kind": "documentation", "line": 167 },
+                { "path": "tests/reader.test.mjs", "kind": "test", "line": 812 }
+              ]
+            },
+            {
+              "id": "batch",
+              "title": "批量验收已提交批注",
+              "summary": "页脚的「验收已提交的 N 条」一次验收所有已提交且未归档的批注，失败的仍留在待处理。",
+              "details": [
+                "确认后对每条批注分别发送 PATCH，互不阻塞；成功的立即标记归档，失败的保留并提示数量。按钮随剩余数量更新，没有可验收批注时隐藏。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-notes.js", "kind": "source", "line": 437 },
+                { "path": "lib/dsh-notes.html", "kind": "source", "line": 35 },
+                { "path": "tests/reader.test.mjs", "kind": "test", "line": 874 }
+              ]
+            },
+            {
+              "id": "archived",
+              "title": "查看或恢复已归档批注",
+              "summary": "「显示已归档（N）」把归档批注放回列表，仍可「恢复」为待处理。",
+              "details": [
+                "归档批注行变暗、勾选框和「验收」隐藏，仍可「恢复」、修改或删除。恢复发送 resolved: false，清除 resolvedAt 和 resolvedBy。",
+                "只含归档批注的模块在开关关闭时整体隐藏；全部归档时空状态说明「没有待处理批注」。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-notes.js", "kind": "source", "line": 239 },
+                { "path": "lib/dsh-notes.js", "kind": "source", "line": 365 },
+                { "path": "lib/dsh-notes.js", "kind": "source", "line": 428 },
+                { "path": "lib/dsh-notes.css", "kind": "source", "line": 35 },
+                { "path": "tests/reader.test.mjs", "kind": "test", "line": 915 }
+              ]
+            },
+            {
+              "id": "blocked",
+              "title": "已归档批注不能再次提交",
+              "summary": "再次提交归档批注会被拒绝，页面提示刷新后重试。",
+              "details": [
+                "批注箱不把归档批注计入全选或已选，服务端也会在提交前返回 409「批注已验收归档」。需要再次处理时先恢复为待处理。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-review.mjs", "kind": "source", "line": 456 },
+                { "path": "docs/graph-format.md", "kind": "documentation", "line": 175 },
+                { "path": "lib/dsh-notes.js", "kind": "source" }
+              ]
+            }
+          ],
+          "edges": [
+            { "from": "review", "to": "accept", "kind": "branch", "label": "确认这条批注的改动符合预期" },
+            { "from": "review", "to": "batch", "kind": "branch", "label": "一次验收所有已提交批注" },
+            { "from": "review", "to": "blocked", "kind": "branch", "label": "页面状态过期，仍提交了已归档批注" },
+            { "from": "accept", "to": "archived", "kind": "sequence" },
+            { "from": "batch", "to": "archived", "kind": "sequence" },
+            { "from": "archived", "to": "review", "kind": "branch", "label": "恢复为待处理后回到列表" },
+            { "from": "blocked", "to": "review", "kind": "branch", "label": "刷新批注箱后重新处理" }
+          ],
+          "layout": {
+            "rows": [
+              ["review"],
+              ["accept", "batch"],
+              ["archived"],
+              ["blocked"]
+            ]
+          }
         }
       ]
     },
@@ -905,58 +1370,83 @@
       "id": "annotation-tasks",
       "area": "review",
       "title": "批注箱与 DSH 直提",
-      "summary": "从多个功能区收集反馈，或从当前批注目标直接发起代码修改任务。",
+      "summary": "从多个功能区收集反馈，交给同一个主会话按模块分工处理，或从当前批注目标直接发起代码修改任务。",
       "flows": [
         {
           "id": "submit",
           "title": "把批注直接提交给 DSH",
-          "summary": "可在批注箱跨功能区勾选，也可提交当前目标的全部已保存批注。",
+          "summary": "在批注箱跨功能区勾选批注，或提交当前目标的全部已保存批注；整批进入同一个主会话，由它按模块分工处理。",
           "nodes": [
             {
               "id": "collect",
               "title": "打开批注箱或当前目标",
-              "summary": "图谱顶栏的批注箱按功能区汇总批注。批注对话框可提交当前目标的已保存批注。",
+              "summary": "图谱顶栏的批注箱按功能区汇总全部批注，每条可修改、删除或勾选；批注对话框可提交当前目标的已保存批注。",
               "details": [
-                "批注箱返回正文、引用、目标、时间和最近有效回执，找不到标题时显示对应 ID。对话框提交当前目标已有记录。"
+                "批注箱返回正文、引用、目标、时间和最近有效回执，找不到标题时显示对应 ID。提交栏有一个「主会话 Agent」选择器，按工作区记住选择；preset 服务缺失或不可用时隐藏，不影响勾选和提交。",
+                "已验收归档的批注默认隐藏，标题旁可切换显示。对话框提交当前目标已有记录，不经过批注箱的勾选。"
               ],
               "sources": [
-                { "path": "lib/dsh-notes.js", "kind": "source" },
+                { "path": "lib/dsh-notes.js", "kind": "source", "line": 79 },
+                { "path": "lib/dsh-notes.html", "kind": "source", "line": 39 },
                 { "path": "lib/dsh-review.js", "kind": "source" },
                 { "path": "lib/dsh-review.mjs", "kind": "source" },
-                { "path": "tests/reader.test.mjs", "kind": "test" }
+                { "path": "tests/reader.test.mjs", "kind": "test", "line": 676 }
               ]
             },
             {
               "id": "select",
               "title": "选择并核对要提交的批注",
-              "summary": "批注箱可逐条或按功能区全选，每次可提交 1 至 100 条。",
+              "summary": "批注箱可逐条或按功能区全选，每次可提交 1 至 100 条；已归档的批注不能再次提交。",
               "details": [
-                "服务端核对 ID、工作区、图谱摘要和目标。缺失批注返回 404，批注所属图谱已变化返回 409，目标失效返回错误。"
+                "全选只覆盖待处理批注。服务端核对 ID、工作区、图谱摘要、目标和归档状态：缺失批注返回 404，所属图谱已变化返回 409，已验收归档返回 409，目标失效返回 400。",
+                "只把选中批注所在的模块算进提交摘要和会话标题。"
               ],
               "sources": [
-                { "path": "lib/dsh-notes.js", "kind": "source" },
-                { "path": "lib/dsh-review.mjs", "kind": "source" },
-                { "path": "lib/annotation-task.mjs", "kind": "source" }
+                { "path": "lib/dsh-notes.js", "kind": "source", "line": 100 },
+                { "path": "lib/dsh-review.mjs", "kind": "source", "line": 439 },
+                { "path": "lib/annotation-task.mjs", "kind": "source", "line": 45 }
+              ]
+            },
+            {
+              "id": "plan",
+              "title": "选择主会话的 agent",
+              "summary": "提交栏可选一个 DSH agent preset 供整批任务使用，子代理继承主会话的 preset。",
+              "details": [
+                "请求只带一个 agentPreset，不再按模块分配。服务端在创建会话前校验：不存在返回 400，preset 服务不可用返回 503；未选择时用部署默认。preset 服务缺失时界面隐藏选择器，仍可按默认提交。",
+                "agent preset 只影响主会话，Threadlight 不逐个模块挑选 agent。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-notes.js", "kind": "source", "line": 79 },
+                { "path": "lib/annotation-task.mjs", "kind": "source", "line": 105 },
+                { "path": "lib/dsh-review.mjs", "kind": "source", "line": 466 },
+                { "path": "README.md", "kind": "documentation", "line": 58 },
+                { "path": "tests/dsh-host.test.mjs", "kind": "test" }
               ]
             },
             {
               "id": "queue",
-              "title": "将编号反馈交给工作区会话",
-              "summary": "提交后，可在当前工作区的普通 DSH 会话中查看按编号整理的反馈与执行进度。",
+              "title": "交给一个主会话按模块分工",
+              "summary": "整批批注只创建一个 DSH 会话；提示词按模块分组，要求主会话为每个模块派子代理，或自己依次处理。",
               "details": [
-                "提示词包含项目、工作区、图谱摘要、目标、正文、引用及相关源码位置，并要求逐条报告改动位置、实际验证和未决事项。"
+                "提示词要求：模块数 ≥2 时用 subagent 工具为每个模块启动子代理，同时最多 3 个；当前会话没有 subagent 工具时，按模块顺序自己处理；先读源码、只改本模块批注涉及的行为、运行验证并逐条报告。模块可能改到同一处代码时先确认边界或改为串行。",
+                "提交按钮在选中多个模块时显示「提交给主会话（N 个模块）」。会话标题在单个模块时为「Threadlight 批注 · 模块名 · N 条」，多模块时为「Threadlight 批注 · N 个模块 · M 条」。"
               ],
               "sources": [
-                { "path": "lib/annotation-task.mjs", "kind": "source" },
-                { "path": "tests/annotation-task.test.mjs", "kind": "test" }
+                { "path": "lib/annotation-task.mjs", "kind": "source", "line": 84 },
+                { "path": "lib/annotation-task.mjs", "kind": "source", "line": 92 },
+                { "path": "lib/annotation-task.mjs", "kind": "source", "line": 197 },
+                { "path": "README.md", "kind": "documentation", "line": 58 },
+                { "path": "docs/graph-format.md", "kind": "documentation", "line": 175 },
+                { "path": "tests/annotation-task.test.mjs", "kind": "test", "line": 126 }
               ]
             },
             {
               "id": "receipt",
               "title": "查看幂等回执",
-              "summary": "批注显示已提交和会话标识。同一组再次提交会返回原会话。",
+              "summary": "页面显示整批批注的提交会话。同一组批注再次提交会返回原会话。",
               "details": [
-                "对去重及排序后的 UUID 集合算摘要，顺序和正文编辑不改变提交标识。成功受理后持久化回执，批注箱忽略待派发和损坏的回执文件。"
+                "对去重及排序后的 UUID 集合算摘要，顺序和正文编辑不改变提交标识。成功受理后持久化回执，批注箱忽略待派发和损坏的回执文件。",
+                "回执记录整批 noteIds、模块清单、可选 agentPreset 和 digest；页面兼容旧版按模块返回的 submissions 数组。"
               ],
               "sources": [
                 {
@@ -984,36 +1474,43 @@
             },
             {
               "id": "retry",
-              "title": "处理选择错误或派发失败",
-              "summary": "缺失、图谱过期或 DSH 拒收会显示错误。DSH 拒收后批注仍已保存，可重试同一组。",
+              "title": "处理选择、计划或派发失败",
+              "summary": "预检失败或 DSH 拒收时，批注保留勾选，页面显示原因，可直接重试。",
               "details": [
-                "拒收返回 502，待派发记录持有原会话 ID、请求 ID 和提示词供重试。当前 DSH 缺少会话提交能力时返回 503。"
+                "preset 不存在、批注已归档或目标失效在创建会话前返回 400、409 或 503；DSH 拒收返回 502。待派发记录持有原会话 ID、请求 ID、提示词和 preset，同一批注集合重试时复用，不重复开会话。",
+                "失败影响整批，不再有按模块的部分成功；需要改变范围时重新勾选批注。"
               ],
               "sources": [
-                { "path": "lib/dsh-review.mjs", "kind": "source" },
-                { "path": "lib/annotation-task.mjs", "kind": "source" },
-                { "path": "tests/annotation-task.test.mjs", "kind": "test" }
+                { "path": "lib/dsh-review.mjs", "kind": "source", "line": 439 },
+                { "path": "lib/annotation-task.mjs", "kind": "source", "line": 153 },
+                { "path": "tests/annotation-task.test.mjs", "kind": "test", "line": 159 }
               ]
             }
           ],
           "edges": [
             { "from": "collect", "to": "select", "kind": "sequence" },
-            { "from": "select", "to": "queue", "kind": "branch", "label": "选择有效且没有已完成回执" },
-            { "from": "select", "to": "receipt", "kind": "branch", "label": "提交能力可用且存在同组有效回执" },
-            { "from": "select", "to": "retry", "kind": "branch", "label": "批注、图谱或目标校验失败" },
+            { "from": "select", "to": "plan", "kind": "branch", "label": "提交栏选定了主会话 agent" },
+            { "from": "select", "to": "queue", "kind": "branch", "label": "未选择 agent，使用部署默认预设" },
+            { "from": "select", "to": "retry", "kind": "branch", "label": "批注缺失、已归档或图谱已更新" },
+            { "from": "plan", "to": "queue", "kind": "branch", "label": "preset 有效且批注均可提交" },
+            { "from": "plan", "to": "retry", "kind": "branch", "label": "preset 不存在或服务不可用" },
             { "from": "queue", "to": "receipt", "kind": "branch", "label": "DSH 已接收" },
-            { "from": "queue", "to": "retry", "kind": "branch", "label": "DSH 拒收或提交不可用" },
-            { "from": "retry", "to": "queue", "kind": "branch", "label": "DSH 恢复后重试同一组待派发任务" },
-            { "from": "retry", "to": "select", "kind": "branch", "label": "修正选择或刷新图谱后重新提交" }
+            { "from": "queue", "to": "retry", "kind": "branch", "label": "DSH 拒收" },
+            { "from": "retry", "to": "queue", "kind": "branch", "label": "重试同一批注集合" },
+            { "from": "retry", "to": "select", "kind": "branch", "label": "刷新图谱或重新勾选后重新提交" }
           ],
           "layout": {
             "rows": [
               ["collect"],
               ["select"],
+              ["plan"],
               ["queue"],
               ["receipt", "retry"]
             ]
-          }
+          },
+          "links": [
+            { "group": "annotations", "flow": "accept", "kind": "continues" }
+          ]
         }
       ]
     },
@@ -1044,15 +1541,31 @@
             {
               "id": "diagram",
               "title": "编辑步骤、连线与布局",
-              "summary": "可增删步骤、拖动连接点连线、调整线端和折线，或用表单编辑。可拖动步骤和恢复自动布局。",
+              "summary": "可增删步骤、拖动连接点连线、调整线端和折线，或用表单编辑；节点标题和说明自动换行。可拖动步骤和恢复自动布局。",
               "details": [
-                "随插件打包的 maxGraph 渲染画布。手动位置与折线点随计划保存。可收起线路设置和编辑详情以扩大画布。连线需要有效端点，重复连线会提示。"
+                "随插件打包的 maxGraph 渲染画布。手动位置与折线点随计划保存。可收起线路设置和编辑详情以扩大画布。连线需要有效端点，重复连线会提示。",
+                "节点为 216×96，标题最多两行、说明最多三行，超出才省略。"
               ],
               "sources": [
                 { "path": "lib/dsh-drafts.js", "kind": "source" },
                 { "path": "lib/dsh-drafts.html", "kind": "source" },
-                { "path": "src/draft-diagram.js", "kind": "source" },
+                { "path": "src/draft-diagram.js", "kind": "source", "line": 3 },
                 { "path": "lib/flow-draft.mjs", "kind": "source" }
+              ]
+            },
+            {
+              "id": "narrow",
+              "title": "在窄窗口用抽屉编辑",
+              "summary": "窗口较窄（例如在 Threadlight 侧栏打开）时，左右面板变成覆盖式抽屉，画布始终占满宽度。",
+              "details": [
+                "宽度 ≤1100px 时收起「线路设置」和「编辑详情」并让画布铺满，点选步骤或连线会自动展开编辑详情抽屉；窗口变窄时也会收起两侧面板。",
+                "≤900px 时画布工具栏重排为两行，≤720px 时顶栏状态另起一行。自动适配的最小缩放提高到 0.45，窄面板里仍能看清节点。"
+              ],
+              "sources": [
+                { "path": "lib/dsh-drafts.js", "kind": "source", "line": 35 },
+                { "path": "lib/dsh-drafts-layout.css", "kind": "source", "line": 50 },
+                { "path": "src/draft-diagram.js", "kind": "source", "line": 88 },
+                { "path": "README.md", "kind": "documentation", "line": 50 }
               ]
             },
             {
@@ -1096,6 +1609,8 @@
           ],
           "edges": [
             { "from": "start", "to": "diagram", "kind": "branch", "label": "需要绘制或调整流程" },
+            { "from": "start", "to": "narrow", "kind": "branch", "label": "窗口宽度不超过 1100px，例如在侧栏打开" },
+            { "from": "narrow", "to": "diagram", "kind": "sequence" },
             { "from": "start", "to": "feedback", "kind": "branch", "label": "直接记录线路反馈" },
             { "from": "diagram", "to": "feedback", "kind": "branch", "label": "需要给步骤或连线补批注" },
             { "from": "diagram", "to": "save", "kind": "branch", "label": "已完成本轮编辑" },
@@ -1106,6 +1621,7 @@
           "layout": {
             "rows": [
               ["start"],
+              ["narrow"],
               ["diagram"],
               ["feedback"],
               ["save"],

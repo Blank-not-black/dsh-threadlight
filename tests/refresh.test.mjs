@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import fs, { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
+import { syncBuiltinESMExports } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -282,7 +283,7 @@ test('refresh recovers a dead lock and rejects refreshes while its live owner is
   await assert.rejects(readFile(lock), { code: 'ENOENT' })
 })
 
-test('reset archives the publication, keeps workspace data and allows a full refresh of unchanged source', async t => {
+test('reset archives the publication, keeps workspace data and refreshes a hand-written graph', async t => {
   const { root, cli } = await fixture(t)
   const control = join(root, '.threadlight')
   const first = await refreshDocumentation(root, { dshCli: cli })
@@ -291,7 +292,25 @@ test('reset archives the publication, keeps workspace data and allows a full ref
     await mkdir(join(control, name))
     await writeFile(join(control, name, 'keep'), name)
   }
-  await writeFile(join(control, 'graph.json'), 'authored graph')
+  // A valid graph.json that was never absorbed is user input; reset keeps it and
+  // the next refresh reviews it incrementally instead of discarding it.
+  const authored = {
+    schemaVersion: 1,
+    project: { name: 'Files' },
+    groups: [{
+      id: 'files', title: 'Files',
+      flows: [{
+        id: 'upload', title: 'Upload file', summary: 'Upload file',
+        nodes: [{
+          id: 'run', title: 'Upload file', summary: 'Upload file', details: ['Follow the source.'],
+          sources: [{ path: 'src/upload.js', line: 1, kind: 'source' }],
+        }],
+        edges: [],
+      }],
+    }],
+  }
+  const authoredText = JSON.stringify(authored, null, 2) + '\n'
+  await writeFile(join(control, 'graph.json'), authoredText)
   await writeFile(join(control, 'changes.md'), '# 图谱变动日志\n')
   const run = () => spawnSync(process.execPath, [threadlightCli, 'reset'], { cwd: root, encoding: 'utf8', windowsHide: true })
   const reset = run()
@@ -303,17 +322,72 @@ test('reset archives the publication, keeps workspace data and allows a full ref
   assert.deepEqual((await readdir(join(root, archived))).sort(), moved.toSorted())
   assert.deepEqual((await readdir(control)).sort(), ['archive', 'graph.json', ...kept].toSorted())
   for (const name of kept) assert.equal(await readFile(join(control, name, 'keep'), 'utf8'), name)
-  assert.equal(await readFile(join(control, 'graph.json'), 'utf8'), 'authored graph')
+  assert.equal(await readFile(join(control, 'graph.json'), 'utf8'), authoredText)
   const repeated = run()
   assert.equal(repeated.status, 0, repeated.stderr)
   assert.match(repeated.stderr, /无需重置/)
   assert.deepEqual(JSON.parse(repeated.stdout), { archived: null, moved: [], next: 'refresh' })
 
   const regenerated = await refreshDocumentation(root, { dshCli: cli })
-  assert.equal(regenerated.sessionId, 'fixture-full')
-  assert.equal(regenerated.snapshot, first.snapshot)
+  assert.equal(regenerated.status, 'rendered')
+  const authoredPublished = await readGraph(root, regenerated.snapshot)
+  assert.equal(authoredPublished.groups[0].flows[0].title, 'Upload file')
   const history = JSON.parse(await readFile(join(control, 'history.json'), 'utf8'))
   assert.deepEqual(history.entries.map(entry => entry.revision), [regenerated.snapshot])
+})
+
+test('reset archives a mirrored working graph so the next refresh rebuilds from source', async t => {
+  const { root, cli } = await fixture(t)
+  const control = join(root, '.threadlight')
+  const first = await refreshDocumentation(root, { dshCli: cli })
+  // Publishing a graph.json that matches the publication absorbs it as a mirror.
+  const published = await readFile(join(control, 'revisions', first.snapshot, 'graph.json'), 'utf8')
+  await writeFile(join(control, 'graph.json'), published)
+  const rendered = await refreshDocumentation(root, {})
+  assert.equal(rendered.status, 'rendered')
+  const state = JSON.parse(await readFile(join(control, 'state.json'), 'utf8'))
+  assert.equal(typeof state.absorbedGraphDigest, 'string')
+
+  const reset = spawnSync(process.execPath, [threadlightCli, 'reset'], { cwd: root, encoding: 'utf8', windowsHide: true })
+  assert.equal(reset.status, 0, reset.stderr)
+  assert.ok(JSON.parse(reset.stdout).moved.includes('graph.json'))
+  await assert.rejects(readFile(join(control, 'graph.json'), 'utf8'), { code: 'ENOENT' })
+
+  const rebuilt = await refreshDocumentation(root, { dshCli: cli })
+  assert.equal(rebuilt.sessionId, 'fixture-full')
+})
+
+test('refresh preserves an edit made while the new revision is written', async t => {
+  const { root, cli } = await fixture(t)
+  const first = await refreshDocumentation(root, { dshCli: cli })
+  const graph = await readGraph(root, first.snapshot)
+  const control = join(root, '.threadlight')
+  const working = join(control, 'graph.json')
+  const state = join(control, 'state.json')
+  const priorState = await readFile(state, 'utf8')
+  const priorViewer = await readFile(first.viewer, 'utf8')
+  graph.project.name = 'First working edit'
+  await writeFile(working, JSON.stringify(graph))
+  graph.project.name = 'Concurrent working edit'
+  const newest = JSON.stringify(graph)
+
+  const link = fs.link
+  t.mock.method(fs, 'link', async (from, to) => {
+    if (to.endsWith('threadlight-reader.json')) await writeFile(working, newest)
+    return link(from, to)
+  })
+  syncBuiltinESMExports()
+  try {
+    await assert.rejects(refreshDocumentation(root), /working graph changed during analysis/)
+  } finally {
+    t.mock.restoreAll()
+    syncBuiltinESMExports()
+  }
+  assert.equal(await readFile(working, 'utf8'), newest)
+  assert.equal(await readFile(state, 'utf8'), priorState)
+  assert.equal(await readFile(first.viewer, 'utf8'), priorViewer)
+  const retried = await refreshDocumentation(root)
+  assert.equal((await readGraph(root, retried.snapshot)).project.name, graph.project.name)
 })
 
 test('workspace capture includes authentication code and supported languages while excluding credential files', async t => {

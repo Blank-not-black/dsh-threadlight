@@ -1,6 +1,6 @@
 # 图谱契约 v1
 
-输入位置为当前 DSH 会话工作目录中的 .threadlight/graph.json。CLI 也可读取用户指定的同格式 JSON。examples/basic.graph.json 是可直接运行的最小例子。
+输入位置为当前 DSH 会话工作目录中的 `.threadlight/graph.json`（工作图谱）。存在发布版本时，查看器与工具读取 `state.json` 指向的 `revisions/<revision>/graph.json`；工作图谱相对上次发布有未吸收的改动时优先使用工作图谱。两者的判定见「工作图谱与发布版本」。CLI 也可读取用户指定的同格式 JSON。examples/basic.graph.json 是可直接运行的最小例子。
 
 | 层级 | 字段 |
 | --- | --- |
@@ -216,7 +216,7 @@ generatedAt 使用与验证记录相同的时间格式。summary 为可选文本
 
 `report` 查找匹配的草稿版本及提交回执，再根据草稿 base 的 group 和 flow 在已发布的 refresh 图谱中定位目标线路。缺少匹配记录、基线或目标线路时跳过该报告。实现期间图谱版本可以变化，当前线路按步骤 ID 匹配。当前图谱中缺失的步骤会列入 skippedSteps，报告中的其他有效步骤仍可发布。整份报告没有可应用的步骤时会跳过，可在图谱补齐步骤后重跑。
 
-先运行 `report` 更新步骤并按当前工作树重新锚定证据，再运行 `refresh` 审阅源码变更。报告发布新的查看器和文档版本，在 state.json 中只更新 revision，保留原源码快照与文档会话记录。发布成功后，`<版本>.applied.json` 保存 reportHash（报告原文件的 SHA-256）、revision 和 at。文件摘要相同时跳过，摘要改变时重新校验。CLI 输出 applied、skipped、rejected 和当前 revision，有拒绝项时退出码为 1。
+先运行 `report` 更新步骤并按当前工作树重新锚定证据，再运行 `refresh` 审阅源码变更。报告发布新的查看器和文档版本，在 `state.json` 中更新 revision 和 absorbedGraphDigest，保留原源码快照与文档会话记录；workspace 只有工作图谱时，`report` 会发布第一个版本并补全 state。发布成功后，`<版本>.applied.json` 保存 reportHash（报告原文件的 SHA-256）、revision 和 at。文件摘要相同时跳过，摘要改变时重新校验。CLI 输出 applied、skipped、rejected 和当前 revision，有拒绝项时退出码为 1。
 
 ## Obsidian 文档与连线约定
 
@@ -240,6 +240,22 @@ generatedAt 使用与验证记录相同的时间格式。summary 为可选文本
 
 相同输入复用先前的快照。中断后可补齐一致的文件，遇冲突时报告路径。图谱发生变化时产出独立快照，为跨版本比对和保留手工笔记提供基础。
 
+### 工作图谱与发布版本
+
+`.threadlight/graph.json` 是工作图谱：DSH 图谱会话、`threadlight-map-project` 技能或手写都写入这里。`refresh` 与 `report` 把结果发布为 `revisions/<revision>/graph.json`，并更新 `state.json`：
+
+| 文件 | 含义 |
+| --- | --- |
+| `graph.json` | 工作图谱；发布后镜像为最新发布内容 |
+| `state.json` | schemaVersion 1、source 快照、revision、readerVersion、codeIndex 和 absorbedGraphDigest |
+| `revisions/<revision>/` | 发布的图谱、查看器快照和项目文档 |
+
+`absorbedGraphDigest` 是发布时工作图谱的 SHA-256。读取当前图谱时：`graph.json` 存在且摘要不等于该字段时，它被视为未发布的修订，查看器、`threadlight_graph` 与 `threadlight_export` 都使用它；否则使用 `state.json` 指向的发布版本。没有 `state.json` 时直接使用 `graph.json`。摘要一致但 state 缺失（例如重置之后）仍按工作图谱处理。
+
+`refresh` 以当前图谱为基线（工作图谱优先），发布后把发布结果写回 `graph.json` 并更新 `absorbedGraphDigest`。`report` 在只有工作图谱的 workspace 里可以发布第一个版本。`reset` 归档发布版本；只有摘要与 `absorbedGraphDigest` 一致的镜像会一起归档，手写或未发布的 `graph.json` 保留。旧版本发布的 state 没有 `absorbedGraphDigest`，这类工作区会先把 `graph.json` 当作工作图谱；下一次 `refresh` 或 `report` 发布时补上该字段。
+
+`refresh` 和 `report` 在更新查看器和状态前，校验工作图谱仍与本次读取的摘要一致。检测到并发新增、编辑或删除时退出并保留当前工作图谱，重试会读取新的基线。
+
 ### 发布历史与变动日志
 
 `refresh` 和 `report` 在图谱、查看器与状态写入成功后，用原子替换更新 `.threadlight/history.json`。该文件使用独立的 schemaVersion 1，`entries` 按发布时间追加，最多保留 200 条。同一 revision 只保留一条。历史缺失或无法解析时按空历史处理。
@@ -248,6 +264,6 @@ generatedAt 使用与验证记录相同的时间格式。summary 为可选文本
 
 变动日志按稳定 ID 比较领域、功能区、线路与步骤。新增或删除整个分支时记录该分支的根。已有步骤的证据先按 path、kind 和 line 匹配，再按行号顺序配对同一文件和类型的剩余引用。步骤状态按显示值比较，验证记录按 id 匹配。JSON 每对版本包含 `from`、`to`、目标版本时间 `at`、排序依据 `orderSource` 和 `changes`。排序依据为 `history`、`mtime` 或 `explicit`。
 
-`reset` 与 `refresh`、`report` 共用发布锁。归档包含当前 `state.json`、`viewer.html`、`revisions/` 和已有的 `history.json`、`changes.md`。下次刷新开启新一轮发布历史。
+`reset` 与 `refresh`、`report` 共用发布锁。归档包含当前 `state.json`、`viewer.html`、`revisions/`、已有的 `history.json`、`changes.md`，以及与 `absorbedGraphDigest` 一致的工作图谱镜像；手写或尚未吸收的 `graph.json` 保留。下次刷新开启新一轮发布历史。
 
 [JSON Canvas 规范](https://jsoncanvas.org/spec/1.0/) · [Obsidian 内部链接](https://obsidian.md/help/links) · [折叠提示框](https://obsidian.md/help/callouts)

@@ -1,5 +1,4 @@
-import { createHash } from 'node:crypto'
-import { parseGraph } from './lib/graph.mjs'
+import { readCurrentGraph } from './lib/graph-source.mjs'
 import { exportObsidian } from './lib/obsidian.mjs'
 import { workspaceStore } from './lib/dsh-store.mjs'
 import { registerThreadlightSkills } from './lib/dsh-skill.mjs'
@@ -11,35 +10,19 @@ export const name = 'dsh-threadlight'
 export const inject = ['tools', 'fs', 'workingDirectory']
 
 const exportRoot = '.threadlight/obsidian'
-const revisionPattern = /^threadlight-[0-9a-f]{16}$/
 
 function activeSession(exec) {
   if (!exec?.agent?.session) throw new Error('Threadlight requires an active DSH session')
   return exec.agent
 }
 
-// The published graph lives in revisions/<revision>/graph.json; a workspace
-// without state.json keeps the hand-written .threadlight/graph.json fallback.
+// The published graph lives in revisions/<revision>/graph.json; a working
+// graph.json written by a DSH graph session or by hand wins until refresh or
+// report absorbs it. See lib/graph-source.mjs for the resolution rules.
 async function readWorkspaceGraph(store) {
-  const state = await store.read('.threadlight/state.json')
-  let raw
-  if (state !== null) {
-    let revision
-    try { revision = JSON.parse(state)?.revision } catch {}
-    if (typeof revision !== 'string' || !revisionPattern.test(revision)) {
-      throw new Error('工作区的 Threadlight 状态文件无效，请刷新图谱。')
-    }
-    raw = await store.read('.threadlight/revisions/' + revision + '/graph.json')
-    if (raw === null) throw new Error('找不到 Threadlight 状态文件指向的图谱，请刷新图谱。')
-  } else {
-    raw = await store.read('.threadlight/graph.json')
-  }
-  if (raw === null) throw new Error('工作区还没有 Threadlight 图谱。')
-  let graph
-  try { graph = parseGraph(raw) } catch (error) {
-    throw new Error('当前工作区的 Threadlight 图谱无效：' + error.message)
-  }
-  return { graph, raw, digest: createHash('sha256').update(raw).digest('hex') }
+  const current = await readCurrentGraph(path => store.read('.threadlight/' + path, 48 * 1024 * 1024))
+  if (current === null) throw new Error('工作区还没有 Threadlight 图谱。')
+  return current
 }
 
 const graphParameters = {
@@ -305,7 +288,7 @@ function graphRender(_args, value) {
 function registerExport(ctx, policy) {
   ctx.effect(() => ctx.tools.register({
     name: 'threadlight_export',
-    description: 'When requested by the user, export .threadlight/graph.json in this DSH session workspace to Obsidian Markdown and JSON Canvas. Returns the new or reused snapshot folder and overview canvas. Use the threadlight-map-project skill to author a graph if one is missing.',
+    description: 'When requested by the user, export the current Threadlight graph of this DSH session workspace (the published revision, or a working .threadlight/graph.json that is newer) to Obsidian Markdown and JSON Canvas. Returns the new or reused snapshot folder and overview canvas. Use the threadlight-map-project skill to author a graph if one is missing.',
     parameters: { type: 'object', additionalProperties: false, properties: {} },
     output: {
       schema: {
@@ -331,9 +314,10 @@ function registerExport(ctx, policy) {
       const cwd = await ctx.workingDirectory.ensure(exec.agent, signal)
       const standing = policy?.resolve({ session: exec.agent.session })
       const store = await workspaceStore(ctx.fs, cwd, signal, standing)
-      const raw = await store.readGraph()
-      if (raw === null) throw new Error('Create .threadlight/graph.json in the current workspace before exporting')
-      return exportObsidian(parseGraph(raw), store, { output: exportRoot, signal })
+      // Export what the workspace currently shows: the published revision, or a
+      // working graph.json that has not been absorbed yet.
+      const { graph } = await readWorkspaceGraph(store)
+      return exportObsidian(graph, store, { output: exportRoot, signal })
     },
   }), 'threadlight: export to Obsidian')
 }

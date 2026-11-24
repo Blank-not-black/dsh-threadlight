@@ -1,0 +1,37 @@
+name: dsh-host-compat
+
+on:
+  workflow_dispatch:
+    inputs:
+      dsh_version:
+        description: '要验证的 @deepseek-ai/dsh 版本'
+        required: true
+        default: '0.2.2-rc.5'
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    name: DSH ${{ inputs.dsh_version }} web profile
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Install the requested DSH
+        env:
+          DSH_VERSION: ${{ inputs.dsh_version }}
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/dsh-host"
+          npm install --prefix "$prefix" --no-save --no-package-lock \
+            "@deepseek-ai/dsh@$DSH_VERSION"
+          echo "THREADLIGHT_DSH_CLI_ROOT=$prefix/node_modules/@deepseek-ai/dsh" >> "$GITHUB_ENV"
+      - name: Run the host integration test
+        run: node --test tests/dsh-host.test.mjs

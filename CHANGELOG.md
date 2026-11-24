@@ -2,6 +2,31 @@
 
 `-dev.N` 为开发版，接口仍可能调整。
 
+## 0.1.0-dev.16 · 2026-11-24
+
+### 新增
+
+- **统一图谱来源**。`.threadlight/graph.json` 现在是工作图谱：DSH 图谱会话或手写更新它，`refresh` 和 `report` 发布后把结果镜像回该文件，并在 `state.json` 记录 `absorbedGraphDigest`。查看器、`threadlight_graph` 和 `threadlight_export` 读取同一份「当前图谱」；工作图谱与发布摘要不一致时以工作图谱为准，不再出现「在 DSH 里更新图谱但页面看不到」。
+- **实现报告可以从工作图谱起步**。只有 `graph.json`、没有 refresh 发布记录的工作区也能运行 `report`，它会发布第一个版本并补全 `state.json`。
+- **批注自动重新挂接**。图谱更新后，批注按模块、线路和步骤的稳定 ID 挂到当前图谱；目标已被删除的批注标记为「目标已失效」，仍在批注箱可见、可编辑、归档或删除，提交时返回说明原因的 409；项目状态胶囊和批注箱摘要增加失效计数。
+- **npm 发布渠道**。`package.json` 增加 `publishConfig` 和 `engines.dsh`；新增 `release` workflow：tag 推送后校验版本与更新日志、跑全量检查、打包、发布 npm 并创建 GitHub Release。新增 [RELEASING.md](RELEASING.md) 发布清单。
+
+### 修复
+
+- **图谱和批注并发更新**。发布前校验工作图谱的摘要，发现分析期间的改动后保留工作图谱和现有发布状态。批注重绑基于宿主读取的最新记录，保留同期修改的正文和归档状态。
+- **预发布流程**。发布工作流使用 tag 指向的提交，npm 和 GitHub Release 使用同一个压缩包。开发版使用 npm 的 `dev` dist-tag，并在 GitHub 标为预发布。
+- **工作区页的「重置图谱」入口**。工作区列表重新按 `canReset` 渲染重置按钮，调用已有的 `POST /threadlight/api/reset`；归档后页面按剩余的工作图谱显示为图谱或草稿。
+- **重置与工作图谱**。与发布一致的 `graph.json` 镜像会随发布归档，让下一次 `refresh` 真正全量重建；手写或未发布的 `graph.json` 仍然保留。
+- **许可证声明**。新增 `dist/floating-ui-LICENSE.txt`，收录 `@floating-ui/dom`、`core`、`utils` 的 MIT 全文；maxGraph 的 NOTICE 随包分发，README 的链接改为发布包内的实际路径。
+- **lockfile 源**。`package-lock.json` 重新生成，3 个 `@floating-ui` 包的 `resolved` 从 npmmirror 指回 `registry.npmjs.org`，根 `devDependencies` 与 `package.json` 对齐。
+
+### 改进
+
+- **DSH 兼容范围**。在 DSH `0.2.1-rc.2` 和 `0.2.2-rc.5` 的 web profile 上跑过宿主实装测试；`engines.dsh` 限定为 `>=0.2.1-rc.2 <0.3.0-0`，README 记录实测版本、profile 和手动测试命令。
+- **宿主集成测试的会话读取**。测试夹具改为包装 `sessionController.prompt` 记录提示词，不再依赖 0.2.2 已移除的 `sessionController.inspect`；同时校验失效批注的 409 文案与摘要计数。
+- **示例图谱更新**。`examples/architecture.graph.json` 同步到当前实现：4 个领域、11 个功能区、19 条线路、93 个步骤，覆盖批注验收、工具卡片、状态胶囊、图谱任务和实现回流。
+- **路线图同步**。把已发布的实现回流移出「接下来」，补充图谱来源、批注归档与重新挂接的现状；README 的开发入口改为「开发方向与后续计划」。
+
 ## 0.1.0-dev.15
 
 ### 新增

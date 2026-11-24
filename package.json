@@ -1,6 +1,6 @@
 {
   "name": "dsh-threadlight",
-  "version": "0.1.0-dev.15",
+  "version": "0.1.0-dev.16",
   "description": "A DSH plugin for documenting Git projects and exploring source-linked workflows.",
   "license": "MIT",
   "author": "Blank_not_black <2687104205@qq.com>",
@@ -30,17 +30,23 @@
     "analyzer/src",
     "dist/draft-diagram.js",
     "dist/maxgraph-LICENSE.txt",
+    "dist/floating-ui-LICENSE.txt",
+    "scripts/maxgraph-NOTICE.txt",
     "skills",
     "examples",
     "cordis.patch.yml",
     "README.md",
     "CHANGELOG.md",
+    "RELEASING.md",
     "llms.txt",
     "AGENTS.md",
     "docs/graph-format.md",
     "docs/roadmap.md",
     "dist/dsh-floating.js"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "keywords": [
     "dsh-plugin",
     "deepseek-harness",
@@ -49,13 +55,16 @@
     "obsidian"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=22",
+    "dsh": ">=0.2.1-rc.2 <0.3.0-0"
   },
   "scripts": {
     "build": "node scripts/build-draft-diagram.mjs && node scripts/build-ui.mjs",
     "precheck": "npm run build",
     "prepack": "npm run build",
-    "check": "node --test tests/*.test.mjs"
+    "check": "node --test tests/*.test.mjs",
+    "release:check": "node scripts/release-check.mjs",
+    "prepublishOnly": "node scripts/release-check.mjs"
   },
   "dsh": {
     "client": {

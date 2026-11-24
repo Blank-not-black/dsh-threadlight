@@ -6,4 +6,5 @@
 - DSH 适配层通过宿主服务处理文件与权限，CLI 使用本机文件系统。实装测试使用独立临时 profile 和工作区。
 - 修改图谱字段、导出布局或快照行为时，更新契约与回归用例。需要产品边界时读 [开发方向](docs/roadmap.md)，需要字段时读 [图谱契约](docs/graph-format.md)。
 - 项目 skills 在 .agents/skills/，DSH 用户可调用的分析 skill 在 skills/。修改注册或打包后检查 DSH 宿主加载与 npm pack 文件范围。
-- 日常检查运行 npm run check。对 DSH 兼容性的结论写清实测版本与 profile。
+- 日常检查运行 npm run check；宿主实装测试用 THREADLIGHT_DSH_CLI_ROOT 指向本机 @deepseek-ai/dsh 包目录后单独运行。发布按 [RELEASING.md](RELEASING.md)，正式版发布前在目标 DSH 版本与 profile 上复跑并记录。
+- 对 DSH 兼容性的结论写清实测版本与 profile。`package.json` 的 engines.dsh 声明支持范围；升级 DSH 后同步 README、llms.txt 和该范围。

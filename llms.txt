@@ -13,6 +13,15 @@
 
 ## 安装（DSH Web/Desktop profile）
 
+已发布的预发布版可以用 `dsh-threadlight@dev` 安装。稳定版发布后使用以下命令。
+
+```powershell
+dsh plugin --profile <profile> add dsh-threadlight
+dsh --profile <profile>
+```
+
+开发中的版本在本目录打包后安装：
+
 ```powershell
 npm ci
 npm run build
@@ -37,14 +46,14 @@ node bin/dsh-threadlight.mjs reset   [repository]                # 归档当前�
 node bin/dsh-threadlight.mjs export  <graph.json> <out-dir>      # Obsidian 笔记 + JSON Canvas
 ```
 
-输出目录都是 `<repository>/.threadlight/`：`viewer.html` 是入口，`revisions/` 保留历次版本，`history.json` 记录发布历史，`drafts/`、`annotations/`、`submissions/`、`implementation/` 是用户数据。建议把 `.threadlight/` 加入目标项目的 `.gitignore`。
+输出目录都是 `<repository>/.threadlight/`：`viewer.html` 是入口，`revisions/` 保留历次版本，`history.json` 记录发布历史，`drafts/`、`annotations/`、`submissions/`、`implementation/` 是用户数据。`graph.json` 是工作图谱；`refresh` 和 `report` 发布后把它镜像为最新发布内容，并在 `state.json` 记录 `absorbedGraphDigest`。建议把 `.threadlight/` 加入目标项目的 `.gitignore`。
 
 ## 推荐工作流
 
 1. 首次生成：`refresh <repo> --patch <dsh patch>`。它启动一个独立 DSH 会话，交给 `threadlight-document-project` 技能，产出 `.threadlight/revisions/<rev>/graph.json` 与查看器。
 2. 日常更新：`watch` 或再跑一次 `refresh`。只处理工作树变化，未变时输出 `unchanged`。
 3. 用户在 DSH 的 Threadlight 页面写批注 → 「批注箱」直接提交给 DSH；或建草稿 → 提交实现任务。
-4. 实现完成后：`report <repo>` 把结果挂回步骤，再 `refresh` 复核文档。
+4. 实现完成后：`report <repo>` 把结果挂回步骤（只有工作图谱时也能发布第一个版本），再 `refresh` 复核文档。
 5. 想比对版本：`changelog <repo>`；想重来：`reset <repo>` 后 `refresh`。
 
 ## 在 DSH 会话里可用的能力
@@ -68,7 +77,11 @@ node bin/dsh-threadlight.mjs export  <graph.json> <out-dir>      # Obsidian 笔�
 
 ```powershell
 npm run check          # 构建 + node:test 全量用例
+$env:THREADLIGHT_DSH_CLI_ROOT = 'C:\path\to\node_modules\@deepseek-ai\dsh'
+node --test tests/dsh-host.test.mjs   # 真实 DSH 宿主实装，临时 HOME + web profile
 ```
+
+当前实测 DSH `0.2.1-rc.2` 与 `0.2.2-rc.5` 的 web profile；`package.json` 的 `engines.dsh` 限定兼容范围。
 
 可选的 Rust 代码索引器（给 JavaScript 证据补符号）：
 

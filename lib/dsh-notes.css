@@ -31,6 +31,7 @@ blockquote { margin: 8px 0; padding: 8px 12px; color: var(--quiet); background: 
 .note-body textarea { display: block; width: 100%; min-height: 6rem; margin: 6px 0; }
 .submitted { color: var(--accent); }
 .archived { color: var(--quiet); }
+.stale { color: #a03b2a; font-size: .85rem; font-weight: 500; }
 /* Accepted notes stay reachable behind the "显示已归档" toggle but read as done. */
 li.resolved { opacity: .72; }
 li.resolved .note-target { font-weight: 500; }

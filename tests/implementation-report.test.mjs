@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import fs, { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { syncBuiltinESMExports } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { test } from 'node:test'
@@ -131,6 +132,37 @@ test('implementation session receives the absolute report path and the submitted
   assert.deepEqual(example.draft, { id, version })
   assert.equal(example.steps[0].step, 'retry')
   assert.deepEqual(JSON.parse(withReport.split('\n\n')[1]), JSON.parse(prompt.split('\n\n')[1]))
+})
+
+test('report preserves a working graph created while the report is publishing', async t => {
+  const { root, first, statePath, readGraph, writeReport } = await fixture(t)
+  const { marker } = await writeReport()
+  const working = join(root, '.threadlight', 'graph.json')
+  const priorState = await readFile(statePath, 'utf8')
+  const priorViewer = await readFile(first.viewer, 'utf8')
+  const graph = await readGraph(first.snapshot)
+  graph.project.name = 'Concurrent working graph'
+  const newest = JSON.stringify(graph)
+
+  const link = fs.link
+  t.mock.method(fs, 'link', async (from, to) => {
+    if (to.endsWith('threadlight-reader.json')) await writeFile(working, newest)
+    return link(from, to)
+  })
+  syncBuiltinESMExports()
+  try {
+    await assert.rejects(ingestImplementationReports(root), /working graph changed during analysis/)
+  } finally {
+    t.mock.restoreAll()
+    syncBuiltinESMExports()
+  }
+  assert.equal(await readFile(working, 'utf8'), newest)
+  assert.equal(await readFile(statePath, 'utf8'), priorState)
+  assert.equal(await readFile(first.viewer, 'utf8'), priorViewer)
+  await assert.rejects(readFile(marker), { code: 'ENOENT' })
+  const retried = await ingestImplementationReports(root)
+  assert.equal(retried.applied.length, 1)
+  assert.equal((await readGraph(retried.revision)).project.name, graph.project.name)
 })
 
 test('report publishes live evidence and preserves the refresh baseline for the next document session', async t => {
@@ -279,4 +311,46 @@ test('evidence keeps an existing symbol without an indexer only if the file matc
     })
     assert.deepEqual(firstNode(graph).sources[0].symbol, sha256 === 'original' ? symbol : undefined)
   }
+})
+
+test('a workspace with only a working graph can report and publish its first revision', async t => {
+  const root = await mkdtemp(join(tmpdir(), 'threadlight-report-bare-'))
+  t.after(() => rm(root, { recursive: true, force: true }))
+  await mkdir(join(root, 'src'))
+  await writeFile(join(root, source.path), 'export function run() { return "retry" }\n')
+  execFileSync('git', ['init', '--quiet'], { cwd: root, windowsHide: true })
+  const control = join(root, '.threadlight')
+  await mkdir(control)
+  await writeFile(join(control, 'graph.json'), JSON.stringify(projectGraph(), null, 2) + '\n')
+
+  const id = randomUUID(), version = 1
+  const draftDir = join(control, 'drafts', id)
+  const reportFile = reportPath(root, id, version)
+  await mkdir(draftDir, { recursive: true })
+  await mkdir(dirname(reportFile), { recursive: true })
+  await writeJson(join(draftDir, version + '.json'), {
+    schemaVersion: 1, id, version, base: { group: 'files', flow: 'upload', digest: 'original' },
+    plan: { nodes: [{ id: 'retry' }] },
+  })
+  await writeJson(join(draftDir, 'submitted-' + version + '.json'), {
+    version, sessionId: randomUUID(), submittedAt: at,
+  })
+  await writeJson(reportFile, {
+    schemaVersion: 1, draft: { id, version }, generatedAt: at,
+    steps: [{ step: 'retry', sources: [source], ...fields }],
+  })
+
+  const result = await ingestImplementationReports(root)
+  assert.deepEqual(result.rejected, [])
+  assert.equal(result.applied.length, 1)
+  const state = await readJson(join(control, 'state.json'))
+  assert.equal(state.revision, result.revision)
+  assert.equal(state.absorbedGraphDigest, createHash('sha256')
+    .update(await readFile(join(control, 'graph.json'))).digest('hex'))
+  assert.ok(Object.keys(state.source.files).includes(source.path))
+  const published = await readJson(join(control, 'revisions', result.revision, 'graph.json'))
+  assert.equal(firstNode(published).state, 'verified')
+  const mirror = await readJson(join(control, 'graph.json'))
+  assert.equal(firstNode(mirror).state, 'verified')
+  assert.match(await readFile(join(control, 'viewer.html'), 'utf8'), /data/)
 })

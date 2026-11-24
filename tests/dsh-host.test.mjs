@@ -8,6 +8,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { test } from 'node:test'
 import { parseGraph } from '../lib/graph.mjs'
+import { graphDigest } from '../lib/graph-source.mjs'
 import { publishReader } from '../lib/reader.mjs'
 
 const cli = process.env.THREADLIGHT_DSH_CLI_ROOT
@@ -44,7 +45,13 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   const control = join(workspace, '.threadlight')
   await writeFile(join(control, 'graph.json'), example, 'utf8')
   const published = await publishReader(parseGraph(example), join(control, 'revisions'))
-  await writeFile(join(control, 'state.json'), JSON.stringify({ revision: published.revision }))
+  // The working graph.json is an absorbed mirror of the publication.
+  await writeFile(join(control, 'state.json'), JSON.stringify({
+    schemaVersion: 1,
+    source: { id: 'a'.repeat(64), head: 'b'.repeat(40), files: {} },
+    revision: published.revision,
+    absorbedGraphDigest: graphDigest(example),
+  }))
   await writeFile(join(control, 'viewer.html'), await readFile(published.viewer))
   await writeFile(probePath, [
     "import { rename, writeFile } from 'node:fs/promises'",
@@ -76,12 +83,27 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
     "    const unavailable = await ctx.workspaceRegistry.create(" + JSON.stringify(unavailableWorkspace) + ", 'Unavailable fixture')",
     "    await rename(unavailable.path, unavailable.path + '-moved')",
     "    await ctx.workspaceRegistry.create(" + JSON.stringify(unreadableGraph) + ", 'Unreadable graph fixture')",
+    "    const captured = new Map()",
+    "    const seenRequests = new Set()",
+    "    const prompt = ctx.sessionController.prompt.bind(ctx.sessionController)",
+    "    ctx.sessionController.prompt = async (args, signal) => {",
+    "      if (!args.requestId || !seenRequests.has(args.requestId)) {",
+    "        if (args.requestId) seenRequests.add(args.requestId)",
+    "        const list = captured.get(args.sessionId) ?? []",
+    "        list.push({ content: args.content, source: { rpcId: args.requestId }, mode: args.mode })",
+    "        captured.set(args.sessionId, list)",
+    "      }",
+    "      return prompt(args, signal)",
+    "    }",
     "    ctx.effect(() => ctx.webServer.register({ kind: 'exact', path: '/threadlight-fixture-session', async handler(req, res) {",
-    "      if (!ctx.connection.authorizeIndex(req, res)) return",
-    "      const id = new URL(req.url, 'http://dsh.invalid').searchParams.get('id')",
-    "      const session = await ctx.sessionController.inspect(id)",
-    "      const prompts = session.events.filter(event => event.type === 'agent/inbox/spliced').flatMap(event => event.data.inserted).filter(message => message.source.kind === 'user')",
-    "      res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ cwd: session.meta.cwd, prompts, ids: empty.sessionIds, graphIds: ws.sessionIds }))",
+    "      try {",
+    "        if (!ctx.connection.authorizeIndex(req, res)) return",
+    "        const id = new URL(req.url, 'http://dsh.invalid').searchParams.get('id')",
+    "        const owner = ctx.workspaceRegistry.list().find(entry => Array.isArray(entry.sessionIds) && entry.sessionIds.includes(id))",
+    "        res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify({ cwd: owner?.path, prompts: captured.get(id) ?? [], ids: empty.sessionIds, graphIds: ws.sessionIds }))",
+    "      } catch (error) {",
+    "        res.writeHead(500, { 'content-type': 'application/json' }).end(JSON.stringify({ error: error.message, stack: error.stack }))",
+    "      }",
     "    } }))",
     "    const base = 'http://127.0.0.1:' + ctx.webServer.port + '/'",
     "    const launch = ctx.connection.authenticatedUrl(base)",
@@ -166,6 +188,11 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
     headers: { cookie, 'content-type': 'application/json', 'x-threadlight-client': 'review', ...headers },
     body: JSON.stringify(body),
   })
+  const readJson = async response => {
+    const text = await response.text()
+    assert.ok(response.ok, response.status + ' ' + text.slice(0, 800))
+    return JSON.parse(text)
+  }
   const launcher = new URL('threadlight/', result.base)
   const launcherResponse = await fetch(launcher, { headers: { cookie } })
   assert.equal(launcherResponse.status, 200)
@@ -210,6 +237,7 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   assert.ok(graphActionIds.includes(result.ws))
   assert.match(workspacesHtml, /data-graph-mode="update"/)
   assert.match(workspacesHtml, /data-graph-mode="regenerate"/)
+  assert.match(workspacesHtml, /data-reset/)
   assert.match(await getPage(new URL('?workspace=missing', launcher)), /role="alert">找不到此工作区/)
   assert.match(html, /href="\?view=workspaces">切换工作区/)
   assert.equal((await fetch(new URL('launch.js', launcher), { headers: { cookie } })).status, 200)
@@ -232,14 +260,14 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   assert.equal(generatedCreation.status, 200, log.slice(-1500) + '\n' + await generatedCreation.clone().text())
   const generatedWorkspace = await generatedCreation.json()
   assert.ok(generatedWorkspace.session)
-  const generatedSession = await (await fetch(new URL('threadlight-fixture-session?id=' + generatedWorkspace.session, result.base), { headers: { cookie } })).json()
+  const generatedSession = await readJson(await fetch(new URL('threadlight-fixture-session?id=' + generatedWorkspace.session, result.base), { headers: { cookie } }))
   assert.match(JSON.stringify(generatedSession.prompts[0]), /生成 Threadlight 图谱/)
   // Manual update and regenerate create their own queued tasks.
   const updateTask = await post('graph-session', { workspace: generatedWorkspace.workspace, mode: 'update' })
   assert.equal(updateTask.status, 200, await updateTask.clone().text())
   const updateTaskBody = await updateTask.json()
   assert.ok(updateTaskBody.session)
-  const updateSession = await (await fetch(new URL('threadlight-fixture-session?id=' + updateTaskBody.session, result.base), { headers: { cookie } })).json()
+  const updateSession = await readJson(await fetch(new URL('threadlight-fixture-session?id=' + updateTaskBody.session, result.base), { headers: { cookie } }))
   assert.match(JSON.stringify(updateSession.prompts[0]), /更新这个项目的 Threadlight 图谱/)
   assert.equal((await post('graph-session', { workspace: generatedWorkspace.workspace, mode: 'nope' })).status, 400)
   const regenerated = await post('graph-session', { workspace: generatedWorkspace.workspace, mode: 'regenerate' })
@@ -351,6 +379,7 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   assert.equal(allNotes.get(orphan.id).groupTitle, removedGroup)
   assert.equal(allNotes.get(orphan.id).flowTitle, flow.id)
   assert.equal(allNotes.get(orphan.id).stepTitle, flow.nodes[0].id)
+  assert.equal(allNotes.get(orphan.id).stale, true)
   const noteSubmission = { workspace: reviewWorkspace, ids: [savedNote.id, updated.id] }
   const submitNotes = (fields = {}, headers = {}) => post('annotations-submit', { ...noteSubmission, ...fields }, headers)
   assert.equal((await submitNotes({}, { 'sec-fetch-site': 'cross-site' })).status, 403)
@@ -359,6 +388,14 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   }
   assert.equal((await submitNotes({ ids: [savedNote.id, randomUUID()] })).status, 404)
   assert.equal((await submitNotes({ digest: 'stale' })).status, 409)
+  const staleSubmit = await submitNotes({ ids: [orphan.id] })
+  assert.equal(staleSubmit.status, 409)
+  assert.match((await staleSubmit.json()).error, /目标已不在当前图谱/)
+  // A stale note can still be archived (and restored) without a live module.
+  const staleArchive = await post('annotations', { workspace: reviewWorkspace, digest, group: removedGroup, id: orphan.id, resolved: true }, {}, 'PATCH')
+  assert.equal(staleArchive.status, 200, await staleArchive.clone().text())
+  const staleRestore = await post('annotations', { workspace: reviewWorkspace, digest, group: removedGroup, id: orphan.id, resolved: false }, {}, 'PATCH')
+  assert.equal(staleRestore.status, 200, await staleRestore.clone().text())
   assert.equal((await submitNotes({ ids: [orphan.id] })).status, 409)
   const submittedNotes = await submitNotes()
   assert.equal(submittedNotes.status, 200, await submittedNotes.clone().text())
@@ -431,7 +468,7 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   assert.equal(Object.hasOwn(archivedNotes.get(savedNote.id), 'resolvedAt'), false)
   const archivedSummary = await (await fetch(new URL('threadlight/api/summary?session=' + noteReceipt.sessionId,
     result.base), { headers: { cookie } })).json()
-  assert.deepEqual(archivedSummary.notes, { total: 4, pending: 3, submitted: 2, resolved: 1 })
+  assert.deepEqual(archivedSummary.notes, { total: 4, pending: 3, submitted: 2, resolved: 1, stale: 1 })
   assert.equal(archivedSummary.notes.pending + archivedSummary.notes.resolved, archivedSummary.notes.total)
   const rejectedArchived = await submitNotes({ ids: [flowNote.id] })
   assert.equal(rejectedArchived.status, 409)
@@ -462,7 +499,7 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   // Two notes were submitted by noteReceipt; the orphan note keeps a directory
   // the summary still counts as pending. Submitted notes stay pending until the
   // user accepts them, so pending is the whole unarchived backlog.
-  assert.deepEqual(summary.notes, { total: 4, pending: 4, submitted: 2, resolved: 0 })
+  assert.deepEqual(summary.notes, { total: 4, pending: 4, submitted: 2, resolved: 0, stale: 1 })
   const unknownSummarySession = await fetch(new URL('threadlight/api/summary?session=' + randomUUID(), result.base),
     { headers: { cookie } })
   assert.equal(unknownSummarySession.status, 404)
@@ -638,11 +675,13 @@ test('installed DSH serves the reviewer, exports notes and accepts annotations a
   assert.equal(reset.status, 200, await reset.clone().text())
   const { archived, moved, next } = await reset.json()
   assert.match(archived, /^\.threadlight\/archive\/\d{8}T\d{6}Z$/)
-  assert.deepEqual(moved, ['state.json', 'viewer.html', 'revisions'])
+  assert.deepEqual(moved, ['state.json', 'viewer.html', 'revisions', 'graph.json'])
   assert.equal(next, 'refresh')
   assert.equal(JSON.parse(await readFile(join(workspace, archived, 'state.json'), 'utf8')).revision, published.revision)
   assert.equal((await stat(join(workspace, archived, 'revisions', published.revision))).isDirectory(), true)
-  assert.equal(await readFile(join(control, 'graph.json'), 'utf8'), example)
+  // The mirror is archived with the publication so a later refresh rebuilds.
+  await assert.rejects(readFile(join(control, 'graph.json'), 'utf8'), { code: 'ENOENT' })
+  assert.equal(await readFile(join(workspace, archived, 'graph.json'), 'utf8'), example)
   assert.match(await readFile(join(control, 'annotations', group.id, savedNote.id + '.json'), 'utf8'), /safe note/)
   // After archiving, that workspace opens as a draft again; the graph-task
   // entry points stay available because a draft can still be regenerated.

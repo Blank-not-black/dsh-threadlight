@@ -26,7 +26,14 @@ npm run check
 
 ## 在 DSH Web 里审阅
 
-在本目录打包，然后安装到 DSH 的 Web profile。
+已发布的预发布版可以用 `dsh plugin --profile web add dsh-threadlight@dev` 安装。稳定版发布后使用以下命令。
+
+~~~powershell
+dsh plugin --profile web add dsh-threadlight
+dsh --profile web
+~~~
+
+开发中的版本在本目录打包，然后安装到 DSH 的 Web profile。
 
 ~~~powershell
 npm ci
@@ -39,10 +46,10 @@ dsh --profile web
 
 在 DSH 侧栏下方点 **Threadlight**，也可以通过同一 DSH Web 地址下的 `/threadlight/` 进入。会话顶栏的 Threadlight 按钮会把面板指向当前对话所属的项目并打开功能总览；面板会记住最近一次进入的项目。
 
-会话输入框下方会显示 Threadlight 状态胶囊：当前项目有多少模块、多少条批注还没提交。点一下打开对应视图；没有图谱的项目不显示。对话里 agent 调用 `threadlight_graph`、`threadlight_annotate` 或 `threadlight_export` 时，会话中会出现 Threadlight 工具卡片，展开可以看完整输出，并直接打开图谱或批注箱。
+会话输入框下方会显示 Threadlight 状态胶囊：当前项目的模块数和待处理批注数；批注目标失效时同时给出数量。点一下打开对应视图；没有图谱的项目不显示。对话里 agent 调用 `threadlight_graph`、`threadlight_annotate` 或 `threadlight_export` 时，会话中会出现 Threadlight 工具卡片，展开可以看完整输出，并直接打开图谱或批注箱。
 
 - 左侧 **See** 打开创建页。DSH 提供系统目录选择器时，点「选择目录」，可以在选择器里新建文件夹或选用已有目录。DSH 提供网页目录能力时，可以填写父目录和新目录名称直接创建，也可以登记已有目录。工作区名称默认取项目目录名。勾选「创建后生成图谱」时，Threadlight 会在新工作区里自动开一个对话，让会话用 `threadlight-map-project` 技能把项目梳理成图谱；完成后从工作区列表进入即可阅读。
-- 右侧 **Shape** 打开工作区列表，可按名称或路径搜索，也可按状态筛选。已发布图谱的项目打开图谱，其余可用项目打开草稿编辑器。每个工作区都提供「更新图谱」和「重新生成」：前者让会话在现有图谱上做增量修订，后者先归档当前发布、再让会话从头重建。两者都会在当前工作区创建普通 DSH 会话。图谱或草稿页可通过「切换工作区」回到列表。
+- 右侧 **Shape** 打开工作区列表，可按名称或路径搜索，也可按状态筛选。已发布图谱的项目打开图谱，其余可用项目打开草稿编辑器。每个工作区都提供「更新图谱」和「重新生成」：前者让会话在现有图谱上做增量修订，后者先归档当前发布、再让会话从头重建。两者都会在当前工作区创建普通 DSH 会话；已发布图谱的工作区还提供「重置图谱」，只归档发布版本、不创建会话。图谱或草稿页可通过「切换工作区」回到列表。
 
 - 右键功能区标题、线路标题或步骤卡片，可打开相应的批注。步骤详情标题也支持右键批注。可以新增、修改或删除批注。批注按模块 ID 保存在工作区的 `.threadlight/annotations/`，图谱更新会保留批注文件。
 - 在线路介绍、步骤卡片或步骤详情中选中文字，右键选「批注所选文字」即可把原文随批注一起保存。也可以选「询问含义」或「进一步讲解」。解释会显示在当前页面，使用 DSH 当前配置的默认模型。模型请求带有选文、图谱上下文和相关源码引用位置，无工具调用。解释和文档生成各自运行。
@@ -59,11 +66,15 @@ dsh --profile web
 
 提示词带上项目和工作区名称、图谱摘要，以及逐条编号的批注目标、正文、引用和相关源码位置。同一组批注重复提交会返回原会话；回执保存在 `.threadlight/submissions/<摘要>.json`，记录涉及模块与主会话 session。
 
-提交后批注仍留在批注箱，标记为「已提交 · 会话 xxxx」。确认 DSH 的改动符合预期后，可以逐条点「验收」归档，或用页脚的「验收已提交的 N 条」批量验收；归档后的批注默认隐藏，标题旁的「显示已归档」开关可以查看并「恢复」。标题同时显示待处理与已归档数量，已归档批注再次提交会被拒绝。
+提交后批注仍留在批注箱，标记为「已提交 · 会话 xxxx」。确认 DSH 的改动符合预期后，可以逐条点「验收」归档，或用页脚的「验收已提交的 N 条」批量验收；归档后的批注默认隐藏，标题旁的「显示已归档」开关可以查看并「恢复」。标题同时显示待处理、目标失效与已归档数量，已归档批注再次提交会被拒绝。
+
+图谱更新后，批注按模块、线路和步骤的稳定 ID 自动挂到当前图谱，不需要删除重写。目标已被删除的批注会标记「目标已失效」：仍可在批注箱里查看和删除，但不能提交；需要在新位置重新批注。
 
 ## 生成和更新项目文档
 
 安装 Git 和 DSH 后，在 Threadlight 目录运行。首次 `refresh` 生成全量图谱。之后可以手动刷新，或使用 `watch` 在前台每 15 秒检查一次。用 Ctrl+C 停止监听。
+
+图谱分两层：`.threadlight/graph.json` 是工作图谱，DSH 图谱会话或手写都会更新它；`refresh` 和 `report` 发布到 `revisions/`，发布后把结果镜像回 `graph.json` 并记录 `absorbedGraphDigest`。两者摘要不一致时，查看器、`threadlight_graph`、`threadlight_export` 都以工作图谱为准；下一次 `refresh` 会吸收它，不会丢掉 DSH 里刚更新的内容。从旧版本升级后，已有工作区里的 `graph.json` 会先按工作图谱显示，运行一次 `refresh` 即可建立吸收摘要。
 
 ~~~powershell
 node bin/dsh-threadlight.mjs refresh D:/your-project --patch D:/config/threadlight-model.json
@@ -86,7 +97,7 @@ node bin/dsh-threadlight.mjs changelog D:/your-project --limit 5
 node bin/dsh-threadlight.mjs changelog D:/your-project --from <revision> --to <revision> --format json
 ~~~
 
-`reset` 将已发布的状态、查看器、版本、历史和变动日志移到 `.threadlight/archive/<UTC 时间戳>/`。草稿、批注、实现报告、Obsidian 导出和手写的 `.threadlight/graph.json` 保留。命令输出仓库相对归档路径、实际移动项和下一步 `refresh`。没有可归档项时路径为 `null`。刷新或报告正持有发布锁时，稍后再重置。重置之后运行 `refresh` 即可启动全量生成。Web 工作区列表的「重新生成」使用相同的归档规则，并在归档后直接创建重新生成图谱的会话。
+`reset` 将已发布的状态、查看器、版本、历史和变动日志移到 `.threadlight/archive/<UTC 时间戳>/`。草稿、批注、实现报告、Obsidian 导出和手写的 `.threadlight/graph.json` 保留；与发布一致的 `graph.json` 镜像会随发布一起归档，让下一次 `refresh` 真正从源码重建。命令输出仓库相对归档路径、实际移动项和下一步 `refresh`。没有可归档项时路径为 `null`。刷新或报告正持有发布锁时，稍后再重置。重置之后运行 `refresh` 即可启动全量生成。Web 工作区列表的「重新生成」使用相同的归档规则，并在归档后直接创建重新生成图谱的会话；「重置图谱」只归档发布，不创建会话。
 
 校验失败时可以用 `validate <graph.json> --json` 拿到结构化回执：稳定错误码、出错位置、说明和修复提示。错误码表见图谱契约。
 
@@ -125,15 +136,26 @@ node bin/dsh-threadlight.mjs view examples/architecture.graph.json dist/evidence
 
 使用 `node bin/dsh-threadlight.mjs export <graph.json> <output-parent>` 可以生成 Obsidian 笔记和 Canvas。DSH 宿主内也保留了 `threadlight-map-project` 与 `threadlight_export` 两个既有入口。用 `npm pack` 可生成用于安装 DSH 插件的本地包。
 
-宿主实测可设置 THREADLIGHT_DSH_CLI_ROOT 为 @deepseek-ai/dsh 的本机包目录后运行 npm run check。实测使用隔离 profile，不依赖 API 凭据。
+宿主实装测试需要把 `THREADLIGHT_DSH_CLI_ROOT` 指向 `@deepseek-ai/dsh` 的本机包目录，再运行 `node --test tests/dsh-host.test.mjs`；它会在隔离的临时 HOME 和 web profile 中启动真实 DSH，不需要 API 凭据。当前实测：
+
+| DSH 版本 | profile | 结果 |
+| --- | --- | --- |
+| 0.2.1-rc.2 | web | 通过 |
+| 0.2.2-rc.5 | web | 通过 |
+
+`package.json` 的 `engines.dsh` 允许 `>=0.2.1-rc.2 <0.3.0-0`。桌面端复用同一套宿主服务，但未单独纳入 CI；升级 DSH 后请先在对应 profile 上重跑这项测试。CI 只跑不需要宿主安装的用例；仓库提供 `dsh-host-compat` 手动 workflow，输入 DSH 版本即可在 Ubuntu 上跑同一用例。
 
 ## 开发入口
 
 - [图谱契约](docs/graph-format.md)
-- [开发表与验收场景](docs/roadmap.md)
+- [开发方向与后续计划](docs/roadmap.md)
+- [发布清单](RELEASING.md)
 - [开发约定和 skills 位置](AGENTS.md)
 - [llms.txt](llms.txt)：给 agent 的安装与使用说明
 
 ## 许可证
 
-[MIT](LICENSE)。随插件打包的 maxGraph 使用 Apache-2.0，其声明见 [scripts/maxgraph-NOTICE.txt](scripts/maxgraph-NOTICE.txt)。
+[MIT](LICENSE)。随插件打包的第三方声明：
+
+- maxGraph 使用 Apache-2.0，许可证与 NOTICE 见发布包内的 `dist/maxgraph-LICENSE.txt`（仓库内为 [scripts/maxgraph-NOTICE.txt](scripts/maxgraph-NOTICE.txt)）。
+- `@floating-ui/dom`、`@floating-ui/core`、`@floating-ui/utils` 使用 MIT，声明见发布包内的 `dist/floating-ui-LICENSE.txt`。
