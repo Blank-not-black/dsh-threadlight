@@ -1,8 +1,23 @@
 # dsh-threadlight
 
+[![npm](https://img.shields.io/npm/v/dsh-threadlight)](https://www.npmjs.com/package/dsh-threadlight)
+[![Release](https://img.shields.io/github/v/release/Blank-not-black/dsh-threadlight?label=release)](https://github.com/Blank-not-black/dsh-threadlight/releases/latest)
 [![check](https://github.com/Blank-not-black/dsh-threadlight/actions/workflows/check.yml/badge.svg)](https://github.com/Blank-not-black/dsh-threadlight/actions/workflows/check.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Threadlight 通过独立的 DeepSeek Harness 文档会话，把项目功能梳理为可浏览的线路。从功能总览进入一条线路，可以看操作顺序、分支和源码证据，也可以切到功能关系查看它与其他线路的接续和使用关系。图谱和 Markdown 由同一份结构化数据生成。
+
+**English overview** · Threadlight is a DSH plugin and CLI that turns a Git project into a browsable feature-flow graph with source-linked evidence, annotations, flow drafts and implementation reports. It renders an offline viewer and module Markdown from one graph, and can export to Obsidian. See [AI discovery](docs/discovery.md) and [llms.txt](llms.txt).
+
+## 界面
+
+![功能总览：项目展开到领域和功能区](docs/screenshots/overview.png)
+
+功能总览从项目逐级展开；图中展开了两个领域、功能区和一条线路的步骤。
+
+![操作流程：步骤、分支和源码/测试证据](docs/screenshots/flow.png)
+
+操作流程显示步骤、分支条件和证据角标；右侧可以查看实现说明、源码与测试位置。
 
 ## 跑一遍
 
@@ -26,14 +41,14 @@ npm run check
 
 ## 在 DSH Web 里审阅
 
-已发布的预发布版可以用 `dsh plugin --profile web add dsh-threadlight@dev` 安装。稳定版发布后使用以下命令。
+稳定版 `0.1.0` 已发布：
 
 ~~~powershell
-dsh plugin --profile web add dsh-threadlight
+dsh plugin --profile web add dsh-threadlight@0.1.0
 dsh --profile web
 ~~~
 
-开发中的版本在本目录打包，然后安装到 DSH 的 Web profile。
+开发版使用 `@dev`（当前 `0.1.0-dev.16`）。开发中的版本在本目录打包，然后安装到 DSH 的 Web profile。
 
 ~~~powershell
 npm ci
@@ -149,6 +164,8 @@ node bin/dsh-threadlight.mjs view examples/architecture.graph.json dist/evidence
 
 - [图谱契约](docs/graph-format.md)
 - [开发方向与后续计划](docs/roadmap.md)
+- [AI 选型与目录速查](docs/discovery.md)
+- [社区介绍文案](docs/community-introduction.md)
 - [发布清单](RELEASING.md)
 - [开发约定和 skills 位置](AGENTS.md)
 - [llms.txt](llms.txt)：给 agent 的安装与使用说明
