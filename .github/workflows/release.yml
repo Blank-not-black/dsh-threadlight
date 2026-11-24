@@ -44,11 +44,25 @@ jobs:
             echo "prerelease=false" >> "$GITHUB_OUTPUT"
           fi
           echo "tarball=./dist/dsh-threadlight-$version.tgz" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - run: npm ci
       - run: npm run check
       - run: mkdir -p dist
       - run: npm pack --pack-destination dist
+      - name: Check whether this version is already published
+        id: npm
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          set -euo pipefail
+          if npm view "dsh-threadlight@$VERSION" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "dsh-threadlight@$VERSION is already on npm; skipping publish and updating the release."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Publish to npm
+        if: steps.npm.outputs.exists != 'true'
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           DIST_TAG: ${{ steps.release.outputs.npm-tag }}

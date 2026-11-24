@@ -6,7 +6,7 @@
 
 1. **npm 渠道**。首次发布在 GitHub 仓库的 Actions Secrets 中设置 `NPM_TOKEN`，使用允许发布且启用 Bypass 2FA 的 npm granular access token。包创建后，可在 npm 的包设置里配置 Trusted Publishing，授权本仓库的 `release.yml` 执行 `npm publish`，然后移除 Actions secret。
 
-   workflow 优先使用 `NPM_TOKEN`，否则使用 Trusted Publishing。配置步骤见 [npm token 文档](https://docs.npmjs.com/creating-and-viewing-access-tokens/) 和 [Trusted Publishing 文档](https://docs.npmjs.com/trusted-publishers/)。
+   workflow 优先使用 `NPM_TOKEN`，否则使用 Trusted Publishing。配置步骤见 [npm token 文档](https://docs.npmjs.com/creating-and-viewing-access-tokens/) 和 [Trusted Publishing 文档](https://docs.npmjs.com/trusted-publishers/)。首次发布新包时 npm 可能进入 staged publishing（versions 里出现 `0.0.0-stage` 占位），需要在 npmjs.com 的 Staged Packages 里用 2FA 批准；批准后后续版本由 Trusted Publishing 直接发布。
 2. **宿主实测**。发布说明里写明实测过的 DSH 版本与 profile，当前记录在 README 的实装测试表格里。
 
 ## 每次发布
@@ -35,9 +35,11 @@
    git commit -m "chore: release <version>"
    git tag v<version>
    git push origin main
-   git push origin tag v<version>
+   git push origin v<version>
    ```
 7. **跟踪 workflow**。`release` 从 tag 指向的提交构建，校验版本与日志，跑完检查后将同一份 tgz 发布到 npm 并附到 GitHub Release。开发版使用 npm `dev` dist-tag 并标为 GitHub 预发布。稳定版使用 `latest`。手动触发时运行 `gh workflow run release.yml --ref v<version>`。认证失败时，配置凭据后可重跑原 workflow。
+
+   workflow 是幂等的：如果该版本已经在 npm 上，发布步骤会跳过并继续创建/更新 GitHub Release，因此中途失败可以直接重跑同一 tag。
 8. **发布后确认**。
    ```powershell
    npm view dsh-threadlight@<version> version dist-tags
