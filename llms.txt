@@ -70,6 +70,8 @@ node bin/dsh-threadlight.mjs export  <graph.json> <out-dir>      # Obsidian 笔�
 
 - 图谱契约：`docs/graph-format.md`（字段、校验错误码、实现报告、快照）
 - 开发方向：`docs/roadmap.md`
+- 选型与目录速查：`docs/discovery.md`
+- 社区介绍文案：`docs/community-introduction.md`
 - 更新日志：`CHANGELOG.md`
 - 开发约定：`AGENTS.md`
 

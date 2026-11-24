@@ -7,6 +7,7 @@
 ### 改进
 
 - **发布 workflow 幂等**。tag 重跑时如果该版本已经在 npm 上，发布步骤会跳过并继续创建或补传 GitHub Release；补充首次发布时 npm staged publishing 的审批说明。
+- **宣传与收录素材**。新增 `docs/discovery.md`、`docs/community-introduction.md`、`docs/promotion.md`、README 界面截图、512px 市场图标和 `screenshots.json`；提交 Awesome DSH Plugin 目录条目。
 
 ## 0.1.0 · 2026-11-24
 

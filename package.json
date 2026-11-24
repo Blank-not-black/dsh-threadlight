@@ -42,6 +42,12 @@
     "AGENTS.md",
     "docs/graph-format.md",
     "docs/roadmap.md",
+    "docs/discovery.md",
+    "docs/community-introduction.md",
+    "docs/promotion.md",
+    "docs/screenshots",
+    "docs/assets",
+    "screenshots.json",
     "dist/dsh-floating.js"
   ],
   "publishConfig": {

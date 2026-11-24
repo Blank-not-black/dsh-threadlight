@@ -166,6 +166,7 @@ node bin/dsh-threadlight.mjs view examples/architecture.graph.json dist/evidence
 - [开发方向与后续计划](docs/roadmap.md)
 - [AI 选型与目录速查](docs/discovery.md)
 - [社区介绍文案](docs/community-introduction.md)
+- [宣传与收录](docs/promotion.md)
 - [发布清单](RELEASING.md)
 - [开发约定和 skills 位置](AGENTS.md)
 - [llms.txt](llms.txt)：给 agent 的安装与使用说明
