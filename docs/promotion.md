@@ -4,7 +4,7 @@
 
 | 渠道 | 状态 | 入口 |
 | --- | --- | --- |
-| Awesome DSH Plugin（DSH 插件市场索引） | PR 待审：[#18451](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18451) | 条目 `data/plugins/Blank-not-black__dsh-threadlight.yml`；合并后会自动进入 [Awesome DSH Plugin](https://awesome-dsh-plugin.com) 和 dsh-market 索引 |
+| Awesome DSH Plugin（DSH 插件市场索引） | CI 通过，等待合并：[#18451](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/pull/18451) | 条目 `data/plugins/Blank-not-black__dsh-threadlight.yml`；合并后会自动进入 [Awesome DSH Plugin](https://awesome-dsh-plugin.com) 和 dsh-market 索引，届时在 README 挂上 Awesome 徽章 |
 | npm | 已发布 `0.1.0`；开发版 `dev` 标签为 `0.1.0-dev.16` | [dsh-threadlight](https://www.npmjs.com/package/dsh-threadlight) |
 | GitHub topics | 已设置 `dsh-plugin`、`deepseek-harness`、`dsh`、`documentation`、`visualization`、`obsidian` 等 | 仓库 About |
 | README / 发现素材 | 已加入徽章、2 张界面截图、`screenshots.json`、`docs/assets/icon-512.png`、[AI 选型与目录速查](discovery.md)、[社区介绍文案](community-introduction.md) | 仓库根目录与 `docs/` |
